@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CODEBUDDY_PLUGIN_ROOT}/scripts/status-hook.mjs\" SessionStart",
+            "command": "cmd /d /s /c \"\"${CODEBUDDY_PLUGIN_ROOT}\\scripts\\status-hook.cmd\" SessionStart\"",
             "timeout": 10
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CODEBUDDY_PLUGIN_ROOT}/scripts/status-hook.mjs\" UserPromptSubmit",
+            "command": "cmd /d /s /c \"\"${CODEBUDDY_PLUGIN_ROOT}\\scripts\\status-hook.cmd\" UserPromptSubmit\"",
             "timeout": 10
           }
         ]
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CODEBUDDY_PLUGIN_ROOT}/scripts/status-hook.mjs\" PreToolUse",
+            "command": "cmd /d /s /c \"\"${CODEBUDDY_PLUGIN_ROOT}\\scripts\\status-hook.cmd\" PreToolUse\"",
             "timeout": 10
           }
         ]
@@ -41,7 +41,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CODEBUDDY_PLUGIN_ROOT}/scripts/status-hook.mjs\" PostToolUse",
+            "command": "cmd /d /s /c \"\"${CODEBUDDY_PLUGIN_ROOT}\\scripts\\status-hook.cmd\" PostToolUse\"",
             "timeout": 10
           }
         ]
@@ -52,7 +52,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CODEBUDDY_PLUGIN_ROOT}/scripts/status-hook.mjs\" PermissionRequest",
+            "command": "cmd /d /s /c \"\"${CODEBUDDY_PLUGIN_ROOT}\\scripts\\status-hook.cmd\" PermissionRequest\"",
             "timeout": 10
           }
         ]
@@ -63,7 +63,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CODEBUDDY_PLUGIN_ROOT}/scripts/status-hook.mjs\" Notification",
+            "command": "cmd /d /s /c \"\"${CODEBUDDY_PLUGIN_ROOT}\\scripts\\status-hook.cmd\" Notification\"",
             "timeout": 10
           }
         ]
@@ -74,7 +74,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CODEBUDDY_PLUGIN_ROOT}/scripts/status-hook.mjs\" Stop",
+            "command": "cmd /d /s /c \"\"${CODEBUDDY_PLUGIN_ROOT}\\scripts\\status-hook.cmd\" Stop\"",
             "timeout": 10
           }
         ]

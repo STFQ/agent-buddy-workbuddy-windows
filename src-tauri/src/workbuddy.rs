@@ -13,6 +13,7 @@ const DOWNLOAD_URL: &str = "https://www.workbuddy.cn/";
 const PLUGIN_JSON: &str = include_str!("../resources/workbuddy-plugin/.codebuddy-plugin/plugin.json");
 const HOOKS_JSON: &str = include_str!("../resources/workbuddy-plugin/hooks.json");
 const STATUS_HOOK: &str = include_str!("../resources/workbuddy-plugin/scripts/status-hook.mjs");
+const STATUS_HOOK_CMD: &str = include_str!("../resources/workbuddy-plugin/scripts/status-hook.cmd");
 const STATUS_RUNTIME: &str = include_str!("../resources/workbuddy-plugin/scripts/status-runtime.mjs");
 
 #[derive(Debug, Serialize)]
@@ -486,6 +487,7 @@ fn install_plugin_files(home: &Path) -> Result<(), String> {
     write_text(&root.join(".codebuddy-plugin").join("marketplace.json"), &marketplace_json(&plugin))?;
     write_text(&plugin.join(".codebuddy-plugin").join("plugin.json"), PLUGIN_JSON)?;
     write_text(&plugin.join("hooks").join("hooks.json"), HOOKS_JSON)?;
+    write_text(&plugin.join("scripts").join("status-hook.cmd"), STATUS_HOOK_CMD)?;
     write_text(&plugin.join("scripts").join("status-hook.mjs"), STATUS_HOOK)?;
     write_text(&plugin.join("scripts").join("status-runtime.mjs"), STATUS_RUNTIME)?;
     Ok(())
