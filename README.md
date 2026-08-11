@@ -19,7 +19,8 @@ Realtime status needs the WorkBuddy plugin to be enabled. After enabling it, res
 The bundled plugin is status-only:
 
 - Includes `status-hook.mjs`
-- Includes `status-hook.cmd` on Windows to locate WorkBuddy's bundled Node runtime
+- Invokes `status-hook.mjs` through WorkBuddy's bundled `node` command on Windows
+- Retains `status-hook.cmd` as a manual fallback launcher
 - Includes `status-runtime.mjs`
 - Does not install `approval-hook.mjs`
 

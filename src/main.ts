@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 type WorkState = "idle" | "thinking" | "tool" | "output" | "waiting" | "done" | "unknown";
@@ -25,9 +26,15 @@ interface CreditSnapshot {
 interface PluginStatus {
   hostInstalled: boolean;
   pluginConfigured: boolean;
+  pluginInstalled: boolean;
   marketplaceAvailable: boolean;
   restartRequired: boolean;
   message: string;
+}
+
+interface PluginInstallFeedback {
+  status?: PluginStatus;
+  error?: string;
 }
 
 interface Snapshot {
@@ -40,6 +47,7 @@ const stage = document.querySelector<HTMLElement>("#pet-stage")!;
 const panel = document.querySelector<HTMLElement>("#credit-panel")!;
 const petCard = document.querySelector<HTMLElement>("#pet-card")!;
 const stateBadge = document.querySelector<HTMLElement>("#state-badge")!;
+const stand = document.querySelector<HTMLElement>("#stand")!;
 const statusText = document.querySelector<HTMLElement>("#status-text")!;
 const creditLeft = document.querySelector<HTMLElement>("#credit-left")!;
 const creditProgress = document.querySelector<HTMLElement>("#credit-progress")!;
@@ -53,8 +61,15 @@ const setupRow = document.querySelector<HTMLElement>("#setup-row")!;
 const setupMessage = document.querySelector<HTMLElement>("#setup-message")!;
 const installPlugin = document.querySelector<HTMLButtonElement>("#install-plugin")!;
 
-const windowRef = getCurrentWindow();
+const hasTauriRuntime = "__TAURI_INTERNALS__" in window;
+const windowRef = hasTauriRuntime ? getCurrentWindow() : null;
 let latestSnapshot: Snapshot | null = null;
+let refreshInFlight = false;
+let installInProgress = false;
+let pluginFeedback: PluginStatus | null = null;
+let pluginFeedbackError: string | null = null;
+let pluginFeedbackUntil = 0;
+let feedbackTimer: number | undefined;
 
 function fmtNumber(value?: number): string {
   if (value === undefined || Number.isNaN(value)) return "--";
@@ -97,6 +112,74 @@ function stateMeta(state: WorkState): { label: string; icon: string; className: 
   }
 }
 
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function pluginIsReady(status: PluginStatus): boolean {
+  return status.pluginConfigured && status.pluginInstalled && status.marketplaceAvailable;
+}
+
+function currentPluginStatus(): PluginStatus | null {
+  if (pluginFeedback && Date.now() < pluginFeedbackUntil) return pluginFeedback;
+  pluginFeedback = null;
+  if (Date.now() >= pluginFeedbackUntil) pluginFeedbackError = null;
+  return latestSnapshot?.plugin ?? null;
+}
+
+function renderPluginStatus(status: PluginStatus) {
+  if (installInProgress) {
+    renderPluginWorking();
+    return;
+  }
+
+  const ready = pluginIsReady(status);
+  setupRow.hidden = false;
+  installPlugin.removeAttribute("aria-busy");
+  setupRow.dataset.status = ready ? (status.restartRequired ? "restart" : "enabled") : "disabled";
+  installPlugin.disabled = ready;
+  installPlugin.textContent = ready ? "✓ 实时状态已启用" : "启用实时状态";
+  setupMessage.textContent = status.message;
+}
+
+function renderPluginWorking() {
+  setupRow.hidden = false;
+  setupRow.dataset.status = "working";
+  installPlugin.disabled = true;
+  installPlugin.textContent = "正在启用…";
+  installPlugin.setAttribute("aria-busy", "true");
+  setupMessage.textContent = "正在通过 WorkBuddy 插件管理器完成安装和校验…";
+}
+
+function renderPluginError(error: string) {
+  setupRow.hidden = false;
+  setupRow.dataset.status = "error";
+  installPlugin.disabled = false;
+  installPlugin.textContent = "重试启用";
+  installPlugin.removeAttribute("aria-busy");
+  setupMessage.textContent = error;
+}
+
+function showPluginFeedback(status?: PluginStatus, error?: string) {
+  window.clearTimeout(feedbackTimer);
+  stage.classList.add("feedback-visible");
+  feedbackTimer = window.setTimeout(() => stage.classList.remove("feedback-visible"), 8000);
+
+  if (status) {
+    pluginFeedback = status;
+    pluginFeedbackError = null;
+    pluginFeedbackUntil = Date.now() + 8000;
+    renderPluginStatus(status);
+    return;
+  }
+
+  if (error) {
+    pluginFeedbackError = error;
+    pluginFeedbackUntil = Date.now() + 8000;
+    renderPluginError(error);
+  }
+}
+
 function applySnapshot(snapshot: Snapshot) {
   latestSnapshot = snapshot;
   const meta = stateMeta(snapshot.activity.state);
@@ -114,60 +197,96 @@ function applySnapshot(snapshot: Snapshot) {
   metricUpdated.textContent = fmtTime(credits.updatedAt);
   creditProgress.style.width = `${Math.max(0, Math.min(100, credits.percent ?? 0))}%`;
 
-  setupRow.hidden = snapshot.plugin.pluginConfigured;
-  setupMessage.textContent = snapshot.plugin.message;
+  const status = currentPluginStatus() ?? snapshot.plugin;
+  if (pluginFeedbackError && Date.now() < pluginFeedbackUntil) {
+    renderPluginError(pluginFeedbackError);
+  } else {
+    renderPluginStatus(status);
+  }
 }
 
 async function refreshSnapshot() {
+  if (!hasTauriRuntime) return;
+  if (refreshInFlight) return;
+  refreshInFlight = true;
   try {
     const snapshot = await invoke<Snapshot>("workbuddy_snapshot");
     applySnapshot(snapshot);
   } catch (error) {
     console.error(error);
+  } finally {
+    refreshInFlight = false;
   }
 }
 
-function reportHitRect() {
+function unionRect(rects: DOMRect[], padding: number, bodyRect: DOMRect) {
+  const left = Math.min(...rects.map((rect) => rect.left)) - bodyRect.left - padding;
+  const top = Math.min(...rects.map((rect) => rect.top)) - bodyRect.top - padding;
+  const right = Math.max(...rects.map((rect) => rect.right)) - bodyRect.left + padding;
+  const bottom = Math.max(...rects.map((rect) => rect.bottom)) - bodyRect.top + padding;
+  return { x: left, y: top, w: right - left, h: bottom - top };
+}
+
+function reportHitRegions() {
+  if (!hasTauriRuntime) return;
   const bodyRect = document.body.getBoundingClientRect();
-  const rects = [petCard.getBoundingClientRect()];
-  if (panel.matches(":hover") || petCard.matches(":hover")) rects.push(panel.getBoundingClientRect());
-  const left = Math.min(...rects.map((rect) => rect.left)) - bodyRect.left;
-  const top = Math.min(...rects.map((rect) => rect.top)) - bodyRect.top;
-  const right = Math.max(...rects.map((rect) => rect.right)) - bodyRect.left;
-  const bottom = Math.max(...rects.map((rect) => rect.bottom)) - bodyRect.top;
-  void invoke("set_hit_rect", { x: left, y: top, w: right - left, h: bottom - top });
+  const pet = unionRect(
+    [petCard.getBoundingClientRect(), stateBadge.getBoundingClientRect(), stand.getBoundingClientRect()],
+    8,
+    bodyRect,
+  );
+  const panelRegion = unionRect([panel.getBoundingClientRect()], 20, bodyRect);
+  void invoke("set_hit_regions", {
+    petX: pet.x,
+    petY: pet.y,
+    petW: pet.w,
+    petH: pet.h,
+    panelX: panelRegion.x,
+    panelY: panelRegion.y,
+    panelW: panelRegion.w,
+    panelH: panelRegion.h,
+  });
 }
 
 petCard.addEventListener("mousedown", async (event) => {
-  if (event.button !== 0) return;
+  if (event.button !== 0 || !windowRef) return;
   await windowRef.startDragging();
 });
 
 installPlugin.addEventListener("click", async () => {
-  installPlugin.disabled = true;
-  setupMessage.textContent = "正在启用状态插件…";
+  installInProgress = true;
+  renderPluginWorking();
+  stage.classList.add("feedback-visible");
+  let status: PluginStatus | undefined;
+  let errorMessage: string | undefined;
   try {
-    const status = await invoke<PluginStatus>("install_workbuddy_status_plugin");
-    setupMessage.textContent = status.message;
-    await refreshSnapshot();
+    if (!hasTauriRuntime) {
+      await new Promise((resolve) => window.setTimeout(resolve, 1000));
+      throw new Error("仅可在 Agent Buddy 桌面应用中启用实时状态。");
+    }
+    status = await invoke<PluginStatus>("install_workbuddy_status_plugin");
   } catch (error) {
-    setupMessage.textContent = String(error);
+    errorMessage = errorText(error);
   } finally {
-    installPlugin.disabled = false;
+    installInProgress = false;
+    showPluginFeedback(status, errorMessage);
   }
 });
 
-panel.addEventListener("mouseenter", reportHitRect);
-panel.addEventListener("mouseleave", reportHitRect);
-petCard.addEventListener("mouseenter", reportHitRect);
-petCard.addEventListener("mouseleave", reportHitRect);
-window.addEventListener("resize", reportHitRect);
+window.addEventListener("resize", reportHitRegions);
+
+if (hasTauriRuntime) {
+  void listen<PluginInstallFeedback>("workbuddy-plugin-status", ({ payload }) => {
+    installInProgress = false;
+    showPluginFeedback(payload.status, payload.error);
+  });
+}
 
 setInterval(refreshSnapshot, 800);
-setInterval(reportHitRect, 120);
+setInterval(reportHitRegions, 120);
 
 void refreshSnapshot();
-reportHitRect();
+reportHitRegions();
 
 document.addEventListener("contextmenu", (event) => event.preventDefault());
 

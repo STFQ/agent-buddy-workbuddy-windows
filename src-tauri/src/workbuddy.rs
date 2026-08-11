@@ -1,6 +1,7 @@
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -8,6 +9,7 @@ use serde_json::{json, Map, Value};
 
 const MARKETPLACE_ID: &str = "workbuddy-buddy";
 const PLUGIN_ID: &str = "workbuddy-buddy@workbuddy-buddy";
+const PLUGIN_VERSION: &str = "0.1.1";
 const DOWNLOAD_URL: &str = "https://www.workbuddy.cn/";
 
 const PLUGIN_JSON: &str = include_str!("../resources/workbuddy-plugin/.codebuddy-plugin/plugin.json");
@@ -47,14 +49,15 @@ pub struct CreditSnapshot {
     error: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginStatus {
-    host_installed: bool,
-    plugin_configured: bool,
-    marketplace_available: bool,
-    restart_required: bool,
-    message: String,
+    pub(crate) host_installed: bool,
+    pub(crate) plugin_configured: bool,
+    pub(crate) plugin_installed: bool,
+    pub(crate) marketplace_available: bool,
+    pub(crate) restart_required: bool,
+    pub(crate) message: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -75,6 +78,18 @@ struct AuthSession {
     account_type: Option<String>,
 }
 
+struct WorkBuddyCli {
+    runner: PathBuf,
+    script: PathBuf,
+    electron_runner: bool,
+}
+
+impl PluginStatus {
+    pub(crate) fn is_ready(&self) -> bool {
+        self.plugin_configured && self.plugin_installed && self.marketplace_available
+    }
+}
+
 #[tauri::command]
 pub fn workbuddy_snapshot() -> Snapshot {
     Snapshot {
@@ -85,11 +100,26 @@ pub fn workbuddy_snapshot() -> Snapshot {
 }
 
 #[tauri::command]
-pub fn install_workbuddy_status_plugin() -> Result<PluginStatus, String> {
+pub async fn install_workbuddy_status_plugin() -> Result<PluginStatus, String> {
+    tauri::async_runtime::spawn_blocking(install_workbuddy_status_plugin_blocking)
+        .await
+        .map_err(|_| "启用 WorkBuddy 实时状态时后台任务异常退出。".to_owned())?
+}
+
+pub(crate) fn install_workbuddy_status_plugin_blocking() -> Result<PluginStatus, String> {
     let home = home_dir()?;
     install_plugin_files(&home)?;
+    install_plugin_with_workbuddy(&home)?;
     enable_plugin_in_settings(&home)?;
-    Ok(plugin_status(true))
+    let status = plugin_status(true);
+    if !status.is_ready() {
+        return Err("WorkBuddy 插件管理器没有完成实时状态插件的注册，请重启 WorkBuddy 后重试。".to_owned());
+    }
+    Ok(status)
+}
+
+pub(crate) fn current_plugin_status() -> PluginStatus {
+    plugin_status(false)
 }
 
 #[tauri::command]
@@ -446,18 +476,31 @@ fn matches_domain(domain: &str, patterns: Option<&Value>) -> bool {
 fn plugin_status(restart_required: bool) -> PluginStatus {
     let home = dirs::home_dir();
     let host_installed = home.as_deref().is_some_and(host_is_installed);
-    let plugin_configured = home
+    let settings_enabled = home
         .as_deref()
         .and_then(|home| read_json_file(&settings_path(home)))
         .is_some_and(|settings| plugin_is_enabled(&settings));
     let marketplace_available = home
+        .as_deref()
+        .is_some_and(|home| marketplace_is_registered(home) && marketplace_manifest_path(home).is_file());
+    let plugin_installed = home
+        .as_deref()
+        .is_some_and(plugin_is_currently_installed);
+    let plugin_configured = settings_enabled && marketplace_available && plugin_installed;
+    let has_any_event = home
         .as_ref()
-        .map(|home| marketplace_root(home).join(".codebuddy-plugin").join("marketplace.json").is_file())
+        .map(|home| home.join(".workbuddy-buddy").join("events.spool").is_file())
         .unwrap_or(false);
     let message = if restart_required {
         "已启用，请重启 WorkBuddy 后新开任务。"
     } else if plugin_configured {
-        "实时状态插件已启用。"
+        if has_any_event {
+            "实时状态已启用并已连接 WorkBuddy。"
+        } else {
+            "实时状态已启用；重启 WorkBuddy 后新开任务即可同步。"
+        }
+    } else if settings_enabled || marketplace_available || installed_plugin_version(home.as_deref()).is_some() {
+        "检测到未完成或过期的状态插件，点击可自动修复。"
     } else if !host_installed {
         "未检测到 WorkBuddy，请先安装并登录。"
     } else {
@@ -468,6 +511,7 @@ fn plugin_status(restart_required: bool) -> PluginStatus {
     PluginStatus {
         host_installed,
         plugin_configured,
+        plugin_installed,
         marketplace_available,
         restart_required,
         message,
@@ -493,6 +537,119 @@ fn install_plugin_files(home: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn install_plugin_with_workbuddy(home: &Path) -> Result<(), String> {
+    let cli = find_workbuddy_cli(home)?;
+    if !marketplace_is_registered(home) {
+        let marketplace = marketplace_root(home).to_string_lossy().into_owned();
+        run_workbuddy_cli(
+            &cli,
+            home,
+            &["plugin", "marketplace", "add", &marketplace, "--name", MARKETPLACE_ID],
+            "注册本地插件源",
+        )?;
+    }
+
+    if installed_plugin_version(Some(home)).is_some() {
+        run_workbuddy_cli(
+            &cli,
+            home,
+            &["plugin", "update", PLUGIN_ID, "--scope", "user"],
+            "更新实时状态插件",
+        )?;
+    } else {
+        run_workbuddy_cli(
+            &cli,
+            home,
+            &["plugin", "install", PLUGIN_ID, "--scope", "user"],
+            "安装实时状态插件",
+        )?;
+    }
+
+    if !marketplace_is_registered(home) || !plugin_is_currently_installed(home) {
+        return Err("WorkBuddy 插件管理器未能完成实时状态插件安装。".to_owned());
+    }
+    Ok(())
+}
+
+fn find_workbuddy_cli(home: &Path) -> Result<WorkBuddyCli, String> {
+    let script = product_dirs()
+        .into_iter()
+        .map(|directory| directory.join("bin").join("codebuddy"))
+        .find(|path| path.is_file())
+        .ok_or_else(|| "未找到 WorkBuddy 命令行组件，请更新或重新安装 WorkBuddy。".to_owned())?;
+
+    if let Some(runner) = workbuddy_node(home) {
+        return Ok(WorkBuddyCli {
+            runner,
+            script,
+            electron_runner: false,
+        });
+    }
+
+    #[cfg(windows)]
+    if let Some(runner) = script
+        .ancestors()
+        .map(|directory| directory.join("WorkBuddy.exe"))
+        .find(|path| path.is_file())
+    {
+        return Ok(WorkBuddyCli {
+            runner,
+            script,
+            electron_runner: true,
+        });
+    }
+
+    Err("未找到 WorkBuddy 内置 Node.js 运行时，请先在 WorkBuddy 中新建一次任务。".to_owned())
+}
+
+fn workbuddy_node(home: &Path) -> Option<PathBuf> {
+    let versions = home.join(".workbuddy").join("binaries").join("node").join("versions");
+    let mut candidates = fs::read_dir(versions)
+        .ok()?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path().join(if cfg!(windows) { "node.exe" } else { "bin/node" }))
+        .filter(|path| path.is_file())
+        .collect::<Vec<_>>();
+    candidates.sort_by(|left, right| right.cmp(left));
+    candidates.into_iter().next()
+}
+
+fn run_workbuddy_cli(
+    cli: &WorkBuddyCli,
+    home: &Path,
+    arguments: &[&str],
+    action: &str,
+) -> Result<(), String> {
+    let config_dir = home.join(".workbuddy");
+    let mut command = Command::new(&cli.runner);
+    command
+        .arg(&cli.script)
+        .args(arguments)
+        .current_dir(home)
+        .env("CODEBUDDY_CONFIG_DIR", &config_dir)
+        .env("WORKBUDDY_CONFIG_DIR", &config_dir)
+        .env("WORKBUDDY_DATA_FOLDER_NAME", ".workbuddy")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if cli.electron_runner {
+        command.env("ELECTRON_RUN_AS_NODE", "1");
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+
+    let output = command
+        .output()
+        .map_err(|_| format!("无法调用 WorkBuddy 插件管理器来{action}。"))?;
+    if !output.status.success() {
+        return Err(format!("WorkBuddy 插件管理器{action}失败。"));
+    }
+    Ok(())
+}
+
 fn enable_plugin_in_settings(home: &Path) -> Result<(), String> {
     let path = settings_path(home);
     let mut settings = read_json_file(&path).unwrap_or_else(|| json!({}));
@@ -505,8 +662,9 @@ fn enable_plugin_in_settings(home: &Path) -> Result<(), String> {
         MARKETPLACE_ID.to_owned(),
         json!({
             "source": {
-                "source": "local",
-                "path": marketplace_root(home).to_string_lossy()
+                "source": "directory",
+                "path": marketplace_root(home).to_string_lossy(),
+                "url": marketplace_root(home).to_string_lossy()
             }
         }),
     );
@@ -525,6 +683,52 @@ fn plugin_is_enabled(settings: &Value) -> bool {
         == Some(true)
 }
 
+fn marketplace_manifest_path(home: &Path) -> PathBuf {
+    marketplace_root(home)
+        .join(".codebuddy-plugin")
+        .join("marketplace.json")
+}
+
+fn marketplace_registry_path(home: &Path) -> PathBuf {
+    home.join(".workbuddy")
+        .join("plugins")
+        .join("known_marketplaces.json")
+}
+
+fn installed_plugins_path(home: &Path) -> PathBuf {
+    home.join(".workbuddy")
+        .join("plugins")
+        .join("installed_plugins.json")
+}
+
+fn marketplace_is_registered(home: &Path) -> bool {
+    read_json_file(&marketplace_registry_path(home))
+        .and_then(|registry| registry.get(MARKETPLACE_ID).cloned())
+        .is_some()
+}
+
+fn installed_plugin_version(home: Option<&Path>) -> Option<String> {
+    let registry = read_json_file(&installed_plugins_path(home?))?;
+    registry
+        .get("plugins")?
+        .get(PLUGIN_ID)?
+        .as_array()?
+        .iter()
+        .find(|entry| {
+            entry
+                .get("installPath")
+                .and_then(Value::as_str)
+                .is_some_and(|path| Path::new(path).is_dir())
+        })
+        .and_then(|entry| entry.get("version"))
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+}
+
+fn plugin_is_currently_installed(home: &Path) -> bool {
+    installed_plugin_version(Some(home)).as_deref() == Some(PLUGIN_VERSION)
+}
+
 fn marketplace_json(plugin: &Path) -> String {
     let source = plugin
         .file_name()
@@ -533,15 +737,23 @@ fn marketplace_json(plugin: &Path) -> String {
         .unwrap_or_else(|| "./plugins/workbuddy-buddy".to_owned());
     serde_json::to_string_pretty(&json!({
         "name": "workbuddy-buddy",
-        "version": "0.1.0",
         "description": "Agent Buddy bundled WorkBuddy status plugin marketplace.",
+        "owner": {
+            "name": "Agent Buddy"
+        },
+        "metadata": {
+            "version": PLUGIN_VERSION
+        },
         "plugins": [
             {
-                "id": "workbuddy-buddy",
-                "name": "Agent Buddy",
-                "version": "0.1.0",
+                "name": MARKETPLACE_ID,
+                "version": PLUGIN_VERSION,
                 "description": "Status-only WorkBuddy lifecycle bridge. No approval hook is enabled.",
                 "source": source,
+                "category": "utility",
+                "author": {
+                    "name": "Agent Buddy"
+                },
                 "license": "MIT"
             }
         ]
@@ -577,7 +789,11 @@ fn write_settings_atomically(path: &Path, settings: &Value) -> Result<(), String
         }
     }
 
-    let tmp = parent.join(format!(".settings.agent-buddy-{}.tmp", std::process::id()));
+    let tmp = parent.join(format!(
+        ".settings.agent-buddy-{}-{}.tmp",
+        std::process::id(),
+        now_millis()
+    ));
     let serialized = serde_json::to_vec_pretty(settings)
         .map_err(|_| "无法序列化 WorkBuddy settings.json。".to_owned())?;
     {
@@ -654,4 +870,27 @@ fn dedupe(paths: Vec<PathBuf>) -> Vec<PathBuf> {
         }
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn marketplace_uses_workbuddy_plugin_name() {
+        let manifest: Value = serde_json::from_str(&marketplace_json(Path::new("workbuddy-buddy"))).unwrap();
+        assert_eq!(manifest.pointer("/plugins/0/name").and_then(Value::as_str), Some(MARKETPLACE_ID));
+        assert_eq!(manifest.pointer("/plugins/0/version").and_then(Value::as_str), Some(PLUGIN_VERSION));
+    }
+
+    #[test]
+    fn hooks_use_cross_platform_node_command() {
+        let manifest: Value = serde_json::from_str(HOOKS_JSON).unwrap();
+        let command = manifest
+            .pointer("/hooks/SessionStart/0/hooks/0/command")
+            .and_then(Value::as_str)
+            .unwrap();
+        assert!(command.starts_with("node \"${CODEBUDDY_PLUGIN_ROOT}/"));
+        assert!(!command.contains("cmd /d"));
+    }
 }

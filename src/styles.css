@@ -45,7 +45,8 @@ body {
   pointer-events: none;
 }
 
-#pet-stage:hover .credit-panel {
+#pet-stage:hover .credit-panel,
+#pet-stage.feedback-visible .credit-panel {
   opacity: 1;
   transform: translateY(0) scale(1);
   pointer-events: auto;
@@ -179,7 +180,29 @@ body {
 
 .setup-row button:disabled {
   opacity: 0.6;
+  cursor: default;
+}
+
+.setup-row[data-status="working"] button {
   cursor: wait;
+}
+
+.setup-row[data-status="enabled"] button,
+.setup-row[data-status="restart"] button {
+  background: #20a75a;
+  opacity: 1;
+}
+
+.setup-row[data-status="restart"] span {
+  color: #9a6810;
+}
+
+.setup-row[data-status="error"] button {
+  background: #d94852;
+}
+
+.setup-row[data-status="error"] span {
+  color: #b32f39;
 }
 
 .pet-card {
