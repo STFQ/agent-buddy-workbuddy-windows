@@ -8,7 +8,7 @@ on:
 
 jobs:
   windows:
-    name: Windows installer
+    name: Windows portable app and installers
     runs-on: windows-latest
 
     steps:
@@ -35,8 +35,15 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      - name: Build Tauri Windows installers
+      - name: Build Tauri Windows app and installers
         run: npx tauri build --bundles nsis,msi
+
+      - name: Upload portable app
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-buddy-workbuddy-windows-portable
+          path: src-tauri/target/release/agent-buddy-workbuddy.exe
+          if-no-files-found: error
 
       - name: Upload NSIS installer
         uses: actions/upload-artifact@v4

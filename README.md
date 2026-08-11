@@ -10,7 +10,7 @@ Windows desktop pet for WorkBuddy credits and realtime work status.
 - Calls the WorkBuddy billing endpoint with the local WorkBuddy login session to show available credits.
 - Bundles the status-only community WorkBuddy plugin files.
 - Provides a one-click “启用实时状态” button that installs/enables the local WorkBuddy plugin.
-- GitHub Actions builds Windows `.exe` and `.msi` installers.
+- GitHub Actions builds a portable `.exe` plus optional `.exe` / `.msi` installers.
 
 ## Important behavior
 
@@ -48,7 +48,10 @@ Actions → Build Windows → Run workflow
 
 Artifacts:
 
-- `agent-buddy-workbuddy-windows-nsis` → `.exe`
+- `agent-buddy-workbuddy-windows-portable` → single `.exe`, download and double-click
+- `agent-buddy-workbuddy-windows-nsis` → installer `.exe`
 - `agent-buddy-workbuddy-windows-msi` → `.msi`
 
 Unsigned builds are fine for friend testing, but Windows SmartScreen may warn about an unknown publisher.
+
+The portable `.exe` is the recommended friend-test artifact. It does not need installation, but WorkBuddy itself must already be installed and logged in. On older Windows machines, Microsoft Edge WebView2 Runtime may also be required.
