@@ -37,6 +37,9 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Test Rust backend
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
       - name: Build Tauri Windows app and installers
         run: npx tauri build --bundles nsis,msi
 

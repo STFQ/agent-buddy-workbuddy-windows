@@ -478,8 +478,10 @@ fn plugin_status(restart_required: bool) -> PluginStatus {
     let host_installed = home.as_deref().is_some_and(host_is_installed);
     let settings_enabled = home
         .as_deref()
-        .and_then(|home| read_json_file(&settings_path(home)))
-        .is_some_and(|settings| plugin_is_enabled(&settings));
+        .is_some_and(|home| {
+            read_json_file(&settings_path(home))
+                .is_some_and(|settings| plugin_is_enabled(&settings, home))
+        });
     let marketplace_available = home
         .as_deref()
         .is_some_and(|home| marketplace_is_registered(home) && marketplace_manifest_path(home).is_file());
@@ -675,12 +677,29 @@ fn enable_plugin_in_settings(home: &Path) -> Result<(), String> {
     write_settings_atomically(&path, &settings)
 }
 
-fn plugin_is_enabled(settings: &Value) -> bool {
-    settings
+fn plugin_is_enabled(settings: &Value, home: &Path) -> bool {
+    let enabled = settings
         .get("enabledPlugins")
         .and_then(|value| value.get(PLUGIN_ID))
         .and_then(Value::as_bool)
-        == Some(true)
+        == Some(true);
+    enabled && marketplace_setting_is_current(settings, home)
+}
+
+fn marketplace_setting_is_current(settings: &Value, home: &Path) -> bool {
+    let source = settings
+        .get("extraKnownMarketplaces")
+        .and_then(|value| value.get(MARKETPLACE_ID))
+        .and_then(|value| value.get("source"));
+    let source_type = source
+        .and_then(|value| value.get("source"))
+        .and_then(Value::as_str);
+    let source_url = source
+        .and_then(|value| value.get("url"))
+        .and_then(Value::as_str);
+
+    source_type == Some("directory")
+        && source_url.is_some_and(|path| Path::new(path) == marketplace_root(home))
 }
 
 fn marketplace_manifest_path(home: &Path) -> PathBuf {
@@ -725,8 +744,36 @@ fn installed_plugin_version(home: Option<&Path>) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
+fn marketplace_plugin_version(home: &Path) -> Option<String> {
+    read_json_file(
+        &marketplace_root(home)
+            .join("plugins")
+            .join(MARKETPLACE_ID)
+            .join(".codebuddy-plugin")
+            .join("plugin.json"),
+    )?
+    .get("version")?
+    .as_str()
+    .map(ToOwned::to_owned)
+}
+
+fn plugin_installation_is_current(
+    cached_version: Option<&str>,
+    marketplace_version: Option<&str>,
+    marketplace_registered: bool,
+) -> bool {
+    cached_version == Some(PLUGIN_VERSION)
+        || (marketplace_registered && marketplace_version == Some(PLUGIN_VERSION))
+}
+
 fn plugin_is_currently_installed(home: &Path) -> bool {
-    installed_plugin_version(Some(home)).as_deref() == Some(PLUGIN_VERSION)
+    let cached_version = installed_plugin_version(Some(home));
+    let marketplace_version = marketplace_plugin_version(home);
+    plugin_installation_is_current(
+        cached_version.as_deref(),
+        marketplace_version.as_deref(),
+        marketplace_is_registered(home),
+    )
 }
 
 fn marketplace_json(plugin: &Path) -> String {
@@ -892,5 +939,53 @@ mod tests {
             .unwrap();
         assert!(command.starts_with("node \"${CODEBUDDY_PLUGIN_ROOT}/"));
         assert!(!command.contains("cmd /d"));
+    }
+
+    #[test]
+    fn accepts_cached_and_registered_directory_plugin_installations() {
+        assert!(plugin_installation_is_current(Some(PLUGIN_VERSION), None, false));
+        assert!(plugin_installation_is_current(None, Some(PLUGIN_VERSION), true));
+        assert!(!plugin_installation_is_current(None, Some(PLUGIN_VERSION), false));
+        assert!(!plugin_installation_is_current(None, Some("0.1.0"), true));
+    }
+
+    #[test]
+    fn rejects_legacy_local_marketplace_setting() {
+        let home = Path::new("test-home");
+        let legacy = json!({
+            "enabledPlugins": {
+                (PLUGIN_ID): true
+            },
+            "extraKnownMarketplaces": {
+                (MARKETPLACE_ID): {
+                    "source": {
+                        "source": "local",
+                        "path": marketplace_root(home).to_string_lossy()
+                    }
+                }
+            }
+        });
+        assert!(!plugin_is_enabled(&legacy, home));
+    }
+
+    #[test]
+    fn accepts_current_directory_marketplace_setting() {
+        let home = Path::new("test-home");
+        let marketplace = marketplace_root(home).to_string_lossy().into_owned();
+        let current = json!({
+            "enabledPlugins": {
+                (PLUGIN_ID): true
+            },
+            "extraKnownMarketplaces": {
+                (MARKETPLACE_ID): {
+                    "source": {
+                        "source": "directory",
+                        "path": marketplace,
+                        "url": marketplace
+                    }
+                }
+            }
+        });
+        assert!(plugin_is_enabled(&current, home));
     }
 }

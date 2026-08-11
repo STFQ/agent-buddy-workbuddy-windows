@@ -20,6 +20,8 @@ The bundled plugin is status-only:
 
 - Includes `status-hook.mjs`
 - Invokes `status-hook.mjs` through WorkBuddy's bundled `node` command on Windows
+- Accepts WorkBuddy's directory-linked plugin installs even when its CLI does not create a cache registry entry
+- Migrates obsolete local marketplace settings to WorkBuddy's current directory-source schema
 - Retains `status-hook.cmd` as a manual fallback launcher
 - Includes `status-runtime.mjs`
 - Does not install `approval-hook.mjs`
