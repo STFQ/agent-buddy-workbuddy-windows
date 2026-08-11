@@ -46,11 +46,11 @@ Push this project to a GitHub repo, then run:
 Actions → Build Windows → Run workflow
 ```
 
-Artifacts:
+Release assets:
 
-- `agent-buddy-workbuddy-windows-portable` → single `.exe`, download and double-click
-- `agent-buddy-workbuddy-windows-nsis` → installer `.exe`
-- `agent-buddy-workbuddy-windows-msi` → `.msi`
+- `Agent-Buddy-WorkBuddy-Portable.zip` → unzip and double-click the `.exe`
+- NSIS installer `.exe`
+- MSI installer `.msi`
 
 Unsigned builds are fine for friend testing, but Windows SmartScreen may warn about an unknown publisher.
 
