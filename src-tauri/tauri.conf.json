@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Agent Buddy",
+  "version": "0.1.0",
+  "identifier": "io.agentbuddy.workbuddy.windows",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "pet",
+        "title": "Agent Buddy",
+        "url": "index.html",
+        "width": 520,
+        "height": 680,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "shadow": false,
+        "focus": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "category": "Utility",
+    "license": "MIT",
+    "icon": [
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "publisher": "Agent Buddy",
+    "homepage": "https://github.com/agent-buddy/agent-buddy-workbuddy",
+    "shortDescription": "WorkBuddy desktop pet with credits and realtime status.",
+    "longDescription": "Agent Buddy floats a WorkBuddy companion on your desktop, showing available credits and realtime WorkBuddy lifecycle status.",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": true,
+        "languages": ["SimpChinese", "English"]
+      }
+    }
+  }
+}

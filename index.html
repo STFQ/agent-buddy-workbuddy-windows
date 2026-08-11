@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent Buddy</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body class="overlay">
+    <main id="pet-stage">
+      <section id="credit-panel" class="credit-panel" aria-live="polite">
+        <div class="panel-top">
+          <div>
+            <div class="brand">WORKBUDDY</div>
+            <div id="status-text" class="status-text">待命</div>
+          </div>
+          <div class="credit-main">
+            <span id="credit-left">--</span>
+            <small id="credit-unit">积分</small>
+          </div>
+        </div>
+
+        <div class="progress-track">
+          <div id="credit-progress" class="progress-fill"></div>
+        </div>
+
+        <dl class="metrics">
+          <div>
+            <dt>可用积分</dt>
+            <dd id="metric-left">--</dd>
+          </div>
+          <div>
+            <dt>剩余比例</dt>
+            <dd id="metric-percent">--</dd>
+          </div>
+          <div>
+            <dt>总积分</dt>
+            <dd id="metric-total">--</dd>
+          </div>
+          <div>
+            <dt>工作状态</dt>
+            <dd id="metric-state">待命</dd>
+          </div>
+          <div>
+            <dt>套餐</dt>
+            <dd id="metric-plan">--</dd>
+          </div>
+          <div>
+            <dt>更新</dt>
+            <dd id="metric-updated">--</dd>
+          </div>
+        </dl>
+
+        <div id="setup-row" class="setup-row" hidden>
+          <button id="install-plugin" type="button">启用实时状态</button>
+          <span id="setup-message">需要安装 WorkBuddy 状态插件</span>
+        </div>
+      </section>
+
+      <section id="pet-card" class="pet-card" data-tauri-drag-region>
+        <div class="traffic">
+          <span class="red"></span>
+          <span class="yellow"></span>
+          <span class="green"></span>
+        </div>
+        <div id="state-badge" class="state-badge">Zz</div>
+        <div class="code-lines">
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </section>
+      <div class="stand"></div>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
