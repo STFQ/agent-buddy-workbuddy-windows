@@ -51,6 +51,14 @@
           </div>
         </dl>
 
+        <label class="theme-picker" for="theme-select">
+          <span>桌宠主题</span>
+          <select id="theme-select">
+            <option value="workbuddy">WorkBuddy</option>
+            <option value="kitty-buddy">KittyBuddy</option>
+          </select>
+        </label>
+
         <div id="setup-row" class="setup-row" data-status="disabled">
           <button id="install-plugin" type="button">启用实时状态</button>
           <span id="setup-message">需要安装 WorkBuddy 状态插件</span>
@@ -72,6 +80,7 @@
           <span></span>
           <span></span>
         </div>
+        <img id="kitty-buddy-image" class="kitty-buddy-image" alt="KittyBuddy 桌宠" draggable="false" />
       </section>
       <div id="stand" class="stand"></div>
     </main>

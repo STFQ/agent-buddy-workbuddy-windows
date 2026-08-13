@@ -6,6 +6,7 @@ Windows desktop pet for WorkBuddy credits and realtime work status.
 
 - Transparent always-on-top desktop pet window.
 - Hover the pet to show the WorkBuddy credit panel.
+- Includes the original WorkBuddy visual and a selectable KittyBuddy theme that follows realtime task states.
 - Reads realtime WorkBuddy lifecycle events from `~/.workbuddy-buddy/events.spool`.
 - Calls the WorkBuddy billing endpoint with the local WorkBuddy login session to show available credits.
 - Bundles the status-only community WorkBuddy plugin files.

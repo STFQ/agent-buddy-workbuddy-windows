@@ -1,8 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import kittyBuddyCompleted from "./assets/desktop-pet/kitty-buddy/KittyBuddyCompleted.png";
+import kittyBuddyFailed from "./assets/desktop-pet/kitty-buddy/KittyBuddyFailed.png";
+import kittyBuddyGenerating from "./assets/desktop-pet/kitty-buddy/KittyBuddyGenerating.png";
+import kittyBuddyIdle from "./assets/desktop-pet/kitty-buddy/KittyBuddyIdle.png";
+import kittyBuddyPlanning from "./assets/desktop-pet/kitty-buddy/KittyBuddyPlanning.png";
+import kittyBuddyRunningTool from "./assets/desktop-pet/kitty-buddy/KittyBuddyRunningTool.png";
+import kittyBuddyThinking from "./assets/desktop-pet/kitty-buddy/KittyBuddyThinking.png";
+import kittyBuddyWaiting from "./assets/desktop-pet/kitty-buddy/KittyBuddyWaiting.png";
 
-type WorkState = "idle" | "thinking" | "tool" | "output" | "waiting" | "done" | "unknown";
+type WorkState = "idle" | "thinking" | "tool" | "output" | "waiting" | "done" | "unknown" | "failed";
+type Theme = "workbuddy" | "kitty-buddy";
 
 interface ActivitySnapshot {
   state: WorkState;
@@ -48,6 +57,8 @@ const panel = document.querySelector<HTMLElement>("#credit-panel")!;
 const petCard = document.querySelector<HTMLElement>("#pet-card")!;
 const stateBadge = document.querySelector<HTMLElement>("#state-badge")!;
 const stand = document.querySelector<HTMLElement>("#stand")!;
+const kittyBuddyImage = document.querySelector<HTMLImageElement>("#kitty-buddy-image")!;
+const themeSelect = document.querySelector<HTMLSelectElement>("#theme-select")!;
 const statusText = document.querySelector<HTMLElement>("#status-text")!;
 const creditLeft = document.querySelector<HTMLElement>("#credit-left")!;
 const creditProgress = document.querySelector<HTMLElement>("#credit-progress")!;
@@ -70,6 +81,27 @@ let pluginFeedback: PluginStatus | null = null;
 let pluginFeedbackError: string | null = null;
 let pluginFeedbackUntil = 0;
 let feedbackTimer: number | undefined;
+
+const kittyBuddyImageByState: Record<WorkState, string> = {
+  idle: kittyBuddyIdle,
+  thinking: kittyBuddyThinking,
+  tool: kittyBuddyRunningTool,
+  output: kittyBuddyGenerating,
+  waiting: kittyBuddyWaiting,
+  done: kittyBuddyCompleted,
+  unknown: kittyBuddyPlanning,
+  failed: kittyBuddyFailed,
+};
+
+function applyTheme(theme: Theme) {
+  stage.dataset.theme = theme;
+  themeSelect.value = theme;
+  localStorage.setItem("agent-buddy-theme", theme);
+}
+
+function setKittyBuddyImage(state: WorkState) {
+  kittyBuddyImage.src = kittyBuddyImageByState[state];
+}
 
 function fmtNumber(value?: number): string {
   if (value === undefined || Number.isNaN(value)) return "--";
@@ -104,6 +136,8 @@ function stateMeta(state: WorkState): { label: string; icon: string; className: 
       return { label: "待确认", icon: "!", className: "waiting" };
     case "done":
       return { label: "已完成", icon: "✓", className: "done" };
+    case "failed":
+      return { label: "连接失败", icon: "×", className: "failed" };
     case "unknown":
       return { label: "等待事件", icon: "?", className: "unknown" };
     case "idle":
@@ -184,6 +218,7 @@ function applySnapshot(snapshot: Snapshot) {
   latestSnapshot = snapshot;
   const meta = stateMeta(snapshot.activity.state);
   stage.dataset.state = meta.className;
+  setKittyBuddyImage(snapshot.activity.state);
   statusText.textContent = meta.label;
   stateBadge.textContent = meta.icon;
   metricState.textContent = meta.label;
@@ -214,6 +249,8 @@ async function refreshSnapshot() {
     applySnapshot(snapshot);
   } catch (error) {
     console.error(error);
+    stage.dataset.state = "failed";
+    setKittyBuddyImage("failed");
   } finally {
     refreshInFlight = false;
   }
@@ -230,8 +267,9 @@ function unionRect(rects: DOMRect[], padding: number, bodyRect: DOMRect) {
 function reportHitRegions() {
   if (!hasTauriRuntime) return;
   const bodyRect = document.body.getBoundingClientRect();
+  const petElements = stage.dataset.theme === "kitty-buddy" ? [petCard] : [petCard, stateBadge, stand];
   const pet = unionRect(
-    [petCard.getBoundingClientRect(), stateBadge.getBoundingClientRect(), stand.getBoundingClientRect()],
+    petElements.map((element) => element.getBoundingClientRect()),
     8,
     bodyRect,
   );
@@ -273,6 +311,11 @@ installPlugin.addEventListener("click", async () => {
   }
 });
 
+themeSelect.addEventListener("change", () => {
+  applyTheme(themeSelect.value === "kitty-buddy" ? "kitty-buddy" : "workbuddy");
+  reportHitRegions();
+});
+
 window.addEventListener("resize", reportHitRegions);
 
 if (hasTauriRuntime) {
@@ -285,6 +328,8 @@ if (hasTauriRuntime) {
 setInterval(refreshSnapshot, 800);
 setInterval(reportHitRegions, 120);
 
+applyTheme(localStorage.getItem("agent-buddy-theme") === "kitty-buddy" ? "kitty-buddy" : "workbuddy");
+setKittyBuddyImage("unknown");
 void refreshSnapshot();
 reportHitRegions();
 
