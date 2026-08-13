@@ -9,9 +9,34 @@ import kittyBuddyPlanning from "./assets/desktop-pet/kitty-buddy/KittyBuddyPlann
 import kittyBuddyRunningTool from "./assets/desktop-pet/kitty-buddy/KittyBuddyRunningTool.png";
 import kittyBuddyThinking from "./assets/desktop-pet/kitty-buddy/KittyBuddyThinking.png";
 import kittyBuddyWaiting from "./assets/desktop-pet/kitty-buddy/KittyBuddyWaiting.png";
+import emberSageCompleted from "./assets/desktop-pet/ember-sage/EmberSageCompleted.png";
+import emberSageFailed from "./assets/desktop-pet/ember-sage/EmberSageFailed.png";
+import emberSageGenerating from "./assets/desktop-pet/ember-sage/EmberSageGenerating.png";
+import emberSageIdle from "./assets/desktop-pet/ember-sage/EmberSageIdle.png";
+import emberSagePlanning from "./assets/desktop-pet/ember-sage/EmberSagePlanning.png";
+import emberSageRunningTool from "./assets/desktop-pet/ember-sage/EmberSageRunningTool.png";
+import emberSageThinking from "./assets/desktop-pet/ember-sage/EmberSageThinking.png";
+import emberSageWaiting from "./assets/desktop-pet/ember-sage/EmberSageWaiting.png";
+import prismaticBadgeCompleted from "./assets/desktop-pet/prismatic-blade/Badge_Completed.png";
+import prismaticBadgeFailed from "./assets/desktop-pet/prismatic-blade/Badge_Failed.png";
+import prismaticBadgeGenerating from "./assets/desktop-pet/prismatic-blade/Badge_Generating.png";
+import prismaticBadgeIdle from "./assets/desktop-pet/prismatic-blade/Badge_Idle.png";
+import prismaticBadgePlanning from "./assets/desktop-pet/prismatic-blade/Badge_Planning.png";
+import prismaticBadgeRunningTool from "./assets/desktop-pet/prismatic-blade/Badge_RunningTool.png";
+import prismaticBadgeThinking from "./assets/desktop-pet/prismatic-blade/Badge_Thinking.png";
+import prismaticBadgeWaiting from "./assets/desktop-pet/prismatic-blade/Badge_Waiting.png";
+import prismaticBladeCompleted from "./assets/desktop-pet/prismatic-blade/PrismaticBladeCompleted.png";
+import prismaticBladeFailed from "./assets/desktop-pet/prismatic-blade/PrismaticBladeFailed.png";
+import prismaticBladeGenerating from "./assets/desktop-pet/prismatic-blade/PrismaticBladeGenerating.png";
+import prismaticBladeIdle from "./assets/desktop-pet/prismatic-blade/PrismaticBladeIdle.png";
+import prismaticBladePlanning from "./assets/desktop-pet/prismatic-blade/PrismaticBladePlanning.png";
+import prismaticBladeRunningTool from "./assets/desktop-pet/prismatic-blade/PrismaticBladeRunningTool.png";
+import prismaticBladeThinking from "./assets/desktop-pet/prismatic-blade/PrismaticBladeThinking.png";
+import prismaticBladeWaiting from "./assets/desktop-pet/prismatic-blade/PrismaticBladeWaiting.png";
 
 type WorkState = "idle" | "thinking" | "tool" | "output" | "waiting" | "done" | "unknown" | "failed";
-type Theme = "workbuddy" | "kitty-buddy";
+type Theme = "workbuddy" | "kitty-buddy" | "prismatic-blade" | "ember-sage";
+type CustomTheme = Exclude<Theme, "workbuddy">;
 
 interface ActivitySnapshot {
   state: WorkState;
@@ -57,7 +82,8 @@ const panel = document.querySelector<HTMLElement>("#credit-panel")!;
 const petCard = document.querySelector<HTMLElement>("#pet-card")!;
 const stateBadge = document.querySelector<HTMLElement>("#state-badge")!;
 const stand = document.querySelector<HTMLElement>("#stand")!;
-const kittyBuddyImage = document.querySelector<HTMLImageElement>("#kitty-buddy-image")!;
+const themePetImage = document.querySelector<HTMLImageElement>("#theme-pet-image")!;
+const themeBadgeImage = document.querySelector<HTMLImageElement>("#theme-badge-image")!;
 const themeSelect = document.querySelector<HTMLSelectElement>("#theme-select")!;
 const statusText = document.querySelector<HTMLElement>("#status-text")!;
 const creditLeft = document.querySelector<HTMLElement>("#credit-left")!;
@@ -82,25 +108,66 @@ let pluginFeedbackError: string | null = null;
 let pluginFeedbackUntil = 0;
 let feedbackTimer: number | undefined;
 
-const kittyBuddyImageByState: Record<WorkState, string> = {
-  idle: kittyBuddyIdle,
-  thinking: kittyBuddyThinking,
-  tool: kittyBuddyRunningTool,
-  output: kittyBuddyGenerating,
-  waiting: kittyBuddyWaiting,
-  done: kittyBuddyCompleted,
-  unknown: kittyBuddyPlanning,
-  failed: kittyBuddyFailed,
+const themeImageByState: Record<CustomTheme, Record<WorkState, string>> = {
+  "kitty-buddy": {
+    idle: kittyBuddyIdle,
+    thinking: kittyBuddyThinking,
+    tool: kittyBuddyRunningTool,
+    output: kittyBuddyGenerating,
+    waiting: kittyBuddyWaiting,
+    done: kittyBuddyCompleted,
+    unknown: kittyBuddyPlanning,
+    failed: kittyBuddyFailed,
+  },
+  "prismatic-blade": {
+    idle: prismaticBladeIdle,
+    thinking: prismaticBladeThinking,
+    tool: prismaticBladeRunningTool,
+    output: prismaticBladeGenerating,
+    waiting: prismaticBladeWaiting,
+    done: prismaticBladeCompleted,
+    unknown: prismaticBladePlanning,
+    failed: prismaticBladeFailed,
+  },
+  "ember-sage": {
+    idle: emberSageIdle,
+    thinking: emberSageThinking,
+    tool: emberSageRunningTool,
+    output: emberSageGenerating,
+    waiting: emberSageWaiting,
+    done: emberSageCompleted,
+    unknown: emberSagePlanning,
+    failed: emberSageFailed,
+  },
 };
+
+const prismaticBadgeByState: Record<WorkState, string> = {
+  idle: prismaticBadgeIdle,
+  thinking: prismaticBadgeThinking,
+  tool: prismaticBadgeRunningTool,
+  output: prismaticBadgeGenerating,
+  waiting: prismaticBadgeWaiting,
+  done: prismaticBadgeCompleted,
+  unknown: prismaticBadgePlanning,
+  failed: prismaticBadgeFailed,
+};
+
+function toTheme(value: string | undefined | null): Theme {
+  if (value === "kitty-buddy" || value === "prismatic-blade" || value === "ember-sage") return value;
+  return "workbuddy";
+}
 
 function applyTheme(theme: Theme) {
   stage.dataset.theme = theme;
   themeSelect.value = theme;
   localStorage.setItem("agent-buddy-theme", theme);
+  setThemeImages(latestSnapshot?.activity.state ?? "unknown");
 }
 
-function setKittyBuddyImage(state: WorkState) {
-  kittyBuddyImage.src = kittyBuddyImageByState[state];
+function setThemeImages(state: WorkState) {
+  const theme = toTheme(stage.dataset.theme);
+  themePetImage.src = theme === "workbuddy" ? "" : themeImageByState[theme][state];
+  themeBadgeImage.src = theme === "prismatic-blade" ? prismaticBadgeByState[state] : "";
 }
 
 function fmtNumber(value?: number): string {
@@ -218,7 +285,7 @@ function applySnapshot(snapshot: Snapshot) {
   latestSnapshot = snapshot;
   const meta = stateMeta(snapshot.activity.state);
   stage.dataset.state = meta.className;
-  setKittyBuddyImage(snapshot.activity.state);
+  setThemeImages(snapshot.activity.state);
   statusText.textContent = meta.label;
   stateBadge.textContent = meta.icon;
   metricState.textContent = meta.label;
@@ -250,7 +317,7 @@ async function refreshSnapshot() {
   } catch (error) {
     console.error(error);
     stage.dataset.state = "failed";
-    setKittyBuddyImage("failed");
+    setThemeImages("failed");
   } finally {
     refreshInFlight = false;
   }
@@ -267,7 +334,7 @@ function unionRect(rects: DOMRect[], padding: number, bodyRect: DOMRect) {
 function reportHitRegions() {
   if (!hasTauriRuntime) return;
   const bodyRect = document.body.getBoundingClientRect();
-  const petElements = stage.dataset.theme === "kitty-buddy" ? [petCard] : [petCard, stateBadge, stand];
+  const petElements = toTheme(stage.dataset.theme) === "workbuddy" ? [petCard, stateBadge, stand] : [petCard];
   const pet = unionRect(
     petElements.map((element) => element.getBoundingClientRect()),
     8,
@@ -312,7 +379,7 @@ installPlugin.addEventListener("click", async () => {
 });
 
 themeSelect.addEventListener("change", () => {
-  applyTheme(themeSelect.value === "kitty-buddy" ? "kitty-buddy" : "workbuddy");
+  applyTheme(toTheme(themeSelect.value));
   reportHitRegions();
 });
 
@@ -328,8 +395,7 @@ if (hasTauriRuntime) {
 setInterval(refreshSnapshot, 800);
 setInterval(reportHitRegions, 120);
 
-applyTheme(localStorage.getItem("agent-buddy-theme") === "kitty-buddy" ? "kitty-buddy" : "workbuddy");
-setKittyBuddyImage("unknown");
+applyTheme(toTheme(localStorage.getItem("agent-buddy-theme")));
 void refreshSnapshot();
 reportHitRegions();
 

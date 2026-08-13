@@ -254,7 +254,7 @@ body {
   transform: scale(0.985);
 }
 
-.kitty-buddy-image {
+.theme-pet-image {
   display: none;
   width: 100%;
   height: 100%;
@@ -262,7 +262,7 @@ body {
   pointer-events: none;
 }
 
-#pet-stage[data-theme="kitty-buddy"] .pet-card {
+#pet-stage[data-theme]:not([data-theme="workbuddy"]) .pet-card {
   left: 56px;
   bottom: 28px;
   width: 408px;
@@ -273,14 +273,29 @@ body {
   box-shadow: none;
 }
 
-#pet-stage[data-theme="kitty-buddy"] .traffic,
-#pet-stage[data-theme="kitty-buddy"] .state-badge,
-#pet-stage[data-theme="kitty-buddy"] .code-lines,
-#pet-stage[data-theme="kitty-buddy"] .stand {
+#pet-stage[data-theme]:not([data-theme="workbuddy"]) .traffic,
+#pet-stage[data-theme]:not([data-theme="workbuddy"]) .state-badge,
+#pet-stage[data-theme]:not([data-theme="workbuddy"]) .code-lines,
+#pet-stage[data-theme]:not([data-theme="workbuddy"]) .stand {
   display: none;
 }
 
-#pet-stage[data-theme="kitty-buddy"] .kitty-buddy-image {
+#pet-stage[data-theme]:not([data-theme="workbuddy"]) .theme-pet-image {
+  display: block;
+}
+
+.theme-badge-image {
+  display: none;
+  position: absolute;
+  top: 6px;
+  right: 0;
+  width: 84px;
+  height: 84px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+#pet-stage[data-theme="prismatic-blade"] .theme-badge-image {
   display: block;
 }
 
