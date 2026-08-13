@@ -85,6 +85,7 @@ const stand = document.querySelector<HTMLElement>("#stand")!;
 const themePetImage = document.querySelector<HTMLImageElement>("#theme-pet-image")!;
 const themeBadgeImage = document.querySelector<HTMLImageElement>("#theme-badge-image")!;
 const themeSelect = document.querySelector<HTMLSelectElement>("#theme-select")!;
+const themePicker = document.querySelector<HTMLElement>(".theme-picker")!;
 const statusText = document.querySelector<HTMLElement>("#status-text")!;
 const creditLeft = document.querySelector<HTMLElement>("#credit-left")!;
 const creditProgress = document.querySelector<HTMLElement>("#credit-progress")!;
@@ -334,7 +335,9 @@ function unionRect(rects: DOMRect[], padding: number, bodyRect: DOMRect) {
 function reportHitRegions() {
   if (!hasTauriRuntime) return;
   const bodyRect = document.body.getBoundingClientRect();
-  const petElements = toTheme(stage.dataset.theme) === "workbuddy" ? [petCard, stateBadge, stand] : [petCard];
+  const petElements = toTheme(stage.dataset.theme) === "workbuddy"
+    ? [petCard, stateBadge, stand, themePicker]
+    : [petCard, themePicker];
   const pet = unionRect(
     petElements.map((element) => element.getBoundingClientRect()),
     8,
