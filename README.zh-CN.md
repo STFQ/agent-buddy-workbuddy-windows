@@ -87,7 +87,7 @@ git push origin main --tags
 
 ## 给编程 Agent 的说明
 
-请从 [AGENTS.md](AGENTS.md) 开始。它提供本仓库的简短操作地图：架构、已验证命令、运行时契约、隐私边界和完成标准。
+请从 [AGENTS.md](AGENTS.md) 开始。它提供本仓库的简短操作地图：架构、已验证命令、运行时契约、隐私边界和完成标准。需要供 AI 文档检索使用的精简入口时，请看 [llms.txt](llms.txt) 和[任务索引](docs/agent-index.md)。
 
 ## 贡献与安全
 

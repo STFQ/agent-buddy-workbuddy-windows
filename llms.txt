@@ -1,0 +1,23 @@
+# Agent Buddy for WorkBuddy Windows
+
+> An open-source Windows Tauri desktop pet for WorkBuddy. It displays real-time local task lifecycle status and account credit information through a privacy-safe, status-only local plugin.
+
+## Documentation
+
+- [Project README](https://github.com/STFQ/agent-buddy-workbuddy-windows/blob/main/README.md): product overview, installation, privacy, development, releases, and project layout.
+- [Chinese README](https://github.com/STFQ/agent-buddy-workbuddy-windows/blob/main/README.zh-CN.md): complete Simplified Chinese project documentation.
+- [Agent Guide](https://github.com/STFQ/agent-buddy-workbuddy-windows/blob/main/AGENTS.md): concise operating instructions, runtime contracts, guardrails, and validation commands for coding agents.
+- [Agent Task Index](https://github.com/STFQ/agent-buddy-workbuddy-windows/blob/main/docs/agent-index.md): task-to-file map and change-specific verification steps.
+- [Packaging Guide](https://github.com/STFQ/agent-buddy-workbuddy-windows/blob/main/docs/desktop-client-packaging.md): verified Windows release process.
+- [Contributing Guide](https://github.com/STFQ/agent-buddy-workbuddy-windows/blob/main/CONTRIBUTING.md): contribution boundaries and local checks.
+
+## Key facts
+
+- Platform: Windows 10+, Tauri 2, Rust, TypeScript, Vite.
+- Product activation: none. Do not add licensing, device binding, issuer, telemetry, or a remote backend without explicit direction.
+- Privacy: the plugin writes only structural lifecycle fields to a local event spool; never add prompts, generated output, files, tool input/output, approval decisions, or tokens.
+- Primary commands: `npm ci`, `npm run build`, `cargo test --manifest-path src-tauri/Cargo.toml --features custom-protocol`, and `npm run build:desktop-client` for release-quality validation.
+
+## Keywords
+
+WorkBuddy, Windows desktop pet, desktop widget, Tauri, Rust, TypeScript, real-time task status, credit monitor, system tray, local plugin, privacy-safe.

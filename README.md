@@ -87,7 +87,7 @@ The `v<version>` tag must match `package.json`. GitHub Actions builds the verifi
 
 ## For coding agents
 
-Start with [AGENTS.md](AGENTS.md). It contains the short operational map: architecture, verified commands, change boundaries, privacy rules, and the definition of done for this repository.
+Start with [AGENTS.md](AGENTS.md). It contains the short operational map: architecture, verified commands, change boundaries, privacy rules, and the definition of done for this repository. For AI-oriented documentation discovery, use [llms.txt](llms.txt) and the [task index](docs/agent-index.md).
 
 ## Contributing and security
 

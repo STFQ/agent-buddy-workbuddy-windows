@@ -3,7 +3,28 @@
   "private": true,
   "version": "0.1.4",
   "type": "module",
-  "description": "Agent Buddy for WorkBuddy on Windows.",
+  "description": "Windows desktop pet for WorkBuddy with real-time task status, credit monitoring, tray controls, and a privacy-safe local plugin.",
+  "license": "MIT",
+  "homepage": "https://github.com/STFQ/agent-buddy-workbuddy-windows#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/STFQ/agent-buddy-workbuddy-windows.git"
+  },
+  "bugs": {
+    "url": "https://github.com/STFQ/agent-buddy-workbuddy-windows/issues"
+  },
+  "keywords": [
+    "workbuddy",
+    "desktop-pet",
+    "desktop-widget",
+    "windows",
+    "tauri",
+    "rust",
+    "typescript",
+    "realtime-status",
+    "credit-monitor",
+    "system-tray"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

@@ -62,6 +62,8 @@ The frontend may listen for `workbuddy-plugin-status` after tray-driven setup. K
 
 ## More detail
 
+- [LLM documentation index](llms.txt)
+- [Agent task index](docs/agent-index.md)
 - [Packaging rules](docs/desktop-client-packaging.md)
 - [Contribution rules](CONTRIBUTING.md)
 - [Security reporting](SECURITY.md)
