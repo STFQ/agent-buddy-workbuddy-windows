@@ -1,5 +1,7 @@
 # Agent Buddy for WorkBuddy Windows
 
+[简体中文](README.zh-CN.md) | English
+
 A Windows desktop companion for WorkBuddy. It stays on top of the desktop, shows the current task lifecycle, and displays the credits available to the signed-in WorkBuddy account.
 
 > This is an independent community project. It is not affiliated with, endorsed by, or supported by WorkBuddy or Tencent.
