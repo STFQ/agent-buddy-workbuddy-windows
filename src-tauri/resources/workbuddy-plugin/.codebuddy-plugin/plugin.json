@@ -1,6 +1,6 @@
 {
   "name": "workbuddy-buddy",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Privacy-safe WorkBuddy lifecycle bridge and fail-open desktop-pet approval UI.",
   "author": {
     "name": "FlashFamily",

@@ -1,14 +1,18 @@
 {
   "name": "agent-buddy-workbuddy-windows",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.4",
   "type": "module",
   "description": "Agent Buddy for WorkBuddy on Windows.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "tauri": "tauri",
-    "tauri:build": "tauri build"
+    "build:desktop-client": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-desktop-client.ps1",
+    "package:desktop-client": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-desktop-client.ps1",
+    "version:desktop-client": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/set-desktop-client-version.ps1",
+    "tauri:build": "npm run build:desktop-client",
+    "verify:desktop-client": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-desktop-client-build.ps1"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0"

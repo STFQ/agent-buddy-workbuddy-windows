@@ -23,6 +23,7 @@
         <div class="progress-track">
           <div id="credit-progress" class="progress-fill"></div>
         </div>
+        <p id="credit-feedback" class="credit-feedback" role="status" hidden></p>
 
         <dl class="metrics">
           <div>
@@ -51,7 +52,7 @@
           </div>
         </dl>
 
-        <div id="setup-row" class="setup-row" hidden>
+        <div id="setup-row" class="setup-row" data-status="disabled">
           <button id="install-plugin" type="button">启用实时状态</button>
           <span id="setup-message">需要安装 WorkBuddy 状态插件</span>
         </div>
@@ -72,8 +73,36 @@
           <span></span>
           <span></span>
         </div>
+        <img id="theme-pet-image" class="theme-pet-image" alt="桌宠主题" draggable="false" />
+        <img id="theme-badge-image" class="theme-badge-image" alt="" draggable="false" />
       </section>
-      <div class="stand"></div>
+      <div id="stand" class="stand"></div>
+      <aside id="theme-menu" class="theme-menu" role="menu" aria-label="切换桌宠主题" hidden>
+        <div class="theme-menu-heading">
+          <span>选择外观</span>
+          <small>右键桌宠打开</small>
+        </div>
+        <button class="theme-option" type="button" role="menuitemradio" data-theme-value="workbuddy">
+          <span class="theme-option-mark workbuddy-mark" aria-hidden="true">W</span>
+          <span class="theme-option-name">WorkBuddy</span>
+          <span class="theme-option-check" aria-hidden="true">✓</span>
+        </button>
+        <button class="theme-option" type="button" role="menuitemradio" data-theme-value="kitty-buddy">
+          <span class="theme-option-mark kitty-mark" aria-hidden="true">K</span>
+          <span class="theme-option-name">KittyBuddy</span>
+          <span class="theme-option-check" aria-hidden="true">✓</span>
+        </button>
+        <button class="theme-option" type="button" role="menuitemradio" data-theme-value="prismatic-blade">
+          <span class="theme-option-mark yasuo-mark" aria-hidden="true">Y</span>
+          <span class="theme-option-name">Yasuo · PrismaticBlade</span>
+          <span class="theme-option-check" aria-hidden="true">✓</span>
+        </button>
+        <button class="theme-option" type="button" role="menuitemradio" data-theme-value="ember-sage">
+          <span class="theme-option-mark jax-mark" aria-hidden="true">J</span>
+          <span class="theme-option-name">Jax · EmberSage</span>
+          <span class="theme-option-check" aria-hidden="true">✓</span>
+        </button>
+      </aside>
     </main>
 
     <script type="module" src="/src/main.ts"></script>
