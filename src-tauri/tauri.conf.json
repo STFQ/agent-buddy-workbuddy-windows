@@ -1,8 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Agent Buddy",
-  "version": "0.1.0",
+  "version": "0.1.4",
   "identifier": "io.agentbuddy.workbuddy.windows",
+  "mainBinaryName": "agent-buddy-workbuddy",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -17,8 +18,8 @@
         "label": "pet",
         "title": "Agent Buddy",
         "url": "index.html",
-        "width": 520,
-        "height": 680,
+        "width": 400,
+        "height": 440,
         "transparent": true,
         "decorations": false,
         "alwaysOnTop": true,
@@ -43,7 +44,7 @@
       "icons/icon.png"
     ],
     "publisher": "Agent Buddy",
-    "homepage": "https://github.com/agent-buddy/agent-buddy-workbuddy",
+    "homepage": "https://github.com/STFQ/agent-buddy-workbuddy-windows",
     "shortDescription": "WorkBuddy desktop pet with credits and realtime status.",
     "longDescription": "Agent Buddy floats a WorkBuddy companion on your desktop, showing available credits and realtime WorkBuddy lifecycle status.",
     "windows": {

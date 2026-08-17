@@ -108,7 +108,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             set_hit_regions,
             set_pet_visible,
-            workbuddy::workbuddy_snapshot,
+            workbuddy::workbuddy_activity_snapshot,
+            workbuddy::workbuddy_credit_snapshot,
             workbuddy::install_workbuddy_status_plugin,
             workbuddy::open_workbuddy_download
         ])
@@ -132,8 +133,8 @@ pub fn run() {
                 } else if let Ok(Some(monitor)) = win.primary_monitor() {
                     let scale = monitor.scale_factor();
                     let size = monitor.size();
-                    let x = (size.width as f64 / scale) - 520.0 - 40.0;
-                    let y = (size.height as f64 / scale) - 680.0 - 60.0;
+                    let x = (size.width as f64 / scale) - 400.0 - 40.0;
+                    let y = (size.height as f64 / scale) - 440.0 - 60.0;
                     let _ = win.set_position(tauri::LogicalPosition::new(x.max(0.0), y.max(0.0)));
                 }
             }

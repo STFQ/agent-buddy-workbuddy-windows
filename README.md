@@ -1,62 +1,96 @@
 # Agent Buddy for WorkBuddy Windows
 
-Windows desktop pet for WorkBuddy credits and realtime work status.
+A Windows desktop companion for WorkBuddy. It stays on top of the desktop, shows the current task lifecycle, and displays the credits available to the signed-in WorkBuddy account.
 
-## What this version does
+> This is an independent community project. It is not affiliated with, endorsed by, or supported by WorkBuddy or Tencent.
 
-- Transparent always-on-top desktop pet window.
-- Hover the pet to show the WorkBuddy credit panel.
-- Includes the original WorkBuddy visual plus selectable KittyBuddy, Yasuo PrismaticBlade, and Jax EmberSage themes that follow realtime task states.
-- Reads realtime WorkBuddy lifecycle events from `~/.workbuddy-buddy/events.spool`.
-- Calls the WorkBuddy billing endpoint with the local WorkBuddy login session to show available credits.
-- Bundles the status-only community WorkBuddy plugin files.
-- Provides a one-click “启用实时状态” button that installs/enables the local WorkBuddy plugin.
-- GitHub Actions builds a portable `.exe` plus optional `.exe` / `.msi` installers.
+**Keywords:** WorkBuddy, Windows desktop pet, desktop widget, Tauri, Rust, TypeScript, real-time task status, credit monitor, system tray.
 
-## Important behavior
+## Features
 
-Realtime status needs the WorkBuddy plugin to be enabled. After enabling it, restart WorkBuddy and start a new WorkBuddy task.
+- Transparent, click-through, always-on-top desktop pet with tray controls.
+- Live task states: idle, thinking, running a tool, generating, waiting for input, completed, and failed.
+- Credit panel with sensible refresh intervals and an explicit stale-data/error state.
+- Four selectable looks: WorkBuddy, KittyBuddy, Prismatic Blade, and Ember Sage. Right-click the pet to switch.
+- One-click setup for the bundled status-only WorkBuddy plugin.
+- Reproducible Windows build, verification, archive, and checksum scripts.
 
-The bundled plugin is status-only:
+## Requirements
 
-- Includes `status-hook.mjs`
-- Invokes `status-hook.mjs` through WorkBuddy's bundled `node` command on Windows
-- Accepts WorkBuddy's directory-linked plugin installs even when its CLI does not create a cache registry entry
-- Migrates obsolete local marketplace settings to WorkBuddy's current directory-source schema
-- Retains `status-hook.cmd` as a manual fallback launcher
-- Includes `status-runtime.mjs`
-- Does not install `approval-hook.mjs`
+- Windows 10 or later.
+- WorkBuddy installed and signed in.
+- Microsoft Edge WebView2 Runtime (usually already present on current Windows installations).
 
-The status plugin writes only a structural whitelist:
+## Install
+
+1. Download the `Agent-Buddy-WorkBuddy-Windows-v*.zip` asset from [Releases](https://github.com/STFQ/agent-buddy-workbuddy-windows/releases).
+2. Extract it and run the contained `.exe`.
+3. Hover the pet to open the panel, then choose **启用实时状态**.
+4. Restart WorkBuddy and begin a new task.
+
+Unsigned binaries can cause a Microsoft SmartScreen warning. Verify the published `.sha256` file before running a download from an untrusted mirror.
+
+## Privacy and data handling
+
+The bundled plugin projects only the following structural lifecycle fields to a local file at `~/.workbuddy-buddy/events.spool`:
 
 ```text
 event, ts, session_id, tool_name, permission_mode, notification_type, ends_with_question
 ```
 
-## Local development
+It does not write prompts, generated text, tool input/output, files, or approval decisions. The desktop app reads the existing local WorkBuddy login session only to query WorkBuddy's billing endpoint; credentials are not sent to this repository or any Agent Buddy service.
 
-```bash
-npm install
+## Development
+
+Install [Node.js 22](https://nodejs.org/), Rust/Cargo, and the Tauri Windows prerequisites. Then run:
+
+```powershell
+npm ci
 npm run build
-npm run tauri:build
+cargo test --manifest-path src-tauri/Cargo.toml --features custom-protocol
+npm run dev
 ```
 
-This requires Rust/Cargo locally. If you do not have Rust installed, push to GitHub and run the Windows workflow.
+For a release-quality client build, use the repository scripts:
 
-## GitHub cloud build
-
-Push this project to a GitHub repo, then run:
-
-```text
-Actions → Build Windows → Run workflow
+```powershell
+npm run build:desktop-client
+npm run package:desktop-client
 ```
 
-Release assets:
+`package:desktop-client` builds, tests, verifies the Windows GUI binary and embedded frontend, then creates the EXE, ZIP, and SHA-256 file. Do not use bare `cargo build --release` or `tauri build` for a distributable client; see the [packaging guide](docs/desktop-client-packaging.md).
 
-- `Agent-Buddy-WorkBuddy-Portable.zip` → unzip and double-click the `.exe`
-- NSIS installer `.exe`
-- MSI installer `.msi`
+## Releases and CI
 
-Unsigned builds are fine for friend testing, but Windows SmartScreen may warn about an unknown publisher.
+Pushes and pull requests to `main` run the Windows build and test pipeline. To publish a release:
 
-The portable `.exe` is the recommended friend-test artifact. It does not need installation, but WorkBuddy itself must already be installed and logged in. On older Windows machines, Microsoft Edge WebView2 Runtime may also be required.
+```powershell
+npm run version:desktop-client -- -Version 0.1.5
+git commit -am "Release v0.1.5"
+git tag v0.1.5
+git push origin main --tags
+```
+
+The `v<version>` tag must match `package.json`. GitHub Actions builds the verified portable package and creates the public GitHub Release. Local release files and build output are intentionally ignored by Git.
+
+## Project layout
+
+| Path | Purpose |
+| --- | --- |
+| `src/` | Vite/TypeScript desktop UI |
+| `src-tauri/src/` | Tauri app and WorkBuddy integration |
+| `src-tauri/resources/` | Bundled status-only WorkBuddy plugin |
+| `scripts/` | Build, packaging, and versioning utilities |
+| `docs/` | Packaging and engineering notes |
+
+## For coding agents
+
+Start with [AGENTS.md](AGENTS.md). It contains the short operational map: architecture, verified commands, change boundaries, privacy rules, and the definition of done for this repository.
+
+## Contributing and security
+
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Security-sensitive reports should follow [SECURITY.md](SECURITY.md), not public issues.
+
+## License and notices
+
+This project is available under the [MIT License](LICENSE). Attribution for the bundled community plugin is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

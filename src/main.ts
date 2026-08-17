@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
+import { LogicalSize } from "@tauri-apps/api/dpi";
 import kittyBuddyCompleted from "./assets/desktop-pet/kitty-buddy/KittyBuddyCompleted.png";
 import kittyBuddyFailed from "./assets/desktop-pet/kitty-buddy/KittyBuddyFailed.png";
 import kittyBuddyGenerating from "./assets/desktop-pet/kitty-buddy/KittyBuddyGenerating.png";
@@ -71,9 +72,8 @@ interface PluginInstallFeedback {
   error?: string;
 }
 
-interface Snapshot {
+interface ActivityAndPluginSnapshot {
   activity: ActivitySnapshot;
-  credits: CreditSnapshot;
   plugin: PluginStatus;
 }
 
@@ -84,8 +84,8 @@ const stateBadge = document.querySelector<HTMLElement>("#state-badge")!;
 const stand = document.querySelector<HTMLElement>("#stand")!;
 const themePetImage = document.querySelector<HTMLImageElement>("#theme-pet-image")!;
 const themeBadgeImage = document.querySelector<HTMLImageElement>("#theme-badge-image")!;
-const themeSelect = document.querySelector<HTMLSelectElement>("#theme-select")!;
-const themePicker = document.querySelector<HTMLElement>(".theme-picker")!;
+const themeMenu = document.querySelector<HTMLElement>("#theme-menu")!;
+const themeOptions = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-theme-value]"));
 const statusText = document.querySelector<HTMLElement>("#status-text")!;
 const creditLeft = document.querySelector<HTMLElement>("#credit-left")!;
 const creditProgress = document.querySelector<HTMLElement>("#credit-progress")!;
@@ -95,14 +95,24 @@ const metricTotal = document.querySelector<HTMLElement>("#metric-total")!;
 const metricState = document.querySelector<HTMLElement>("#metric-state")!;
 const metricPlan = document.querySelector<HTMLElement>("#metric-plan")!;
 const metricUpdated = document.querySelector<HTMLElement>("#metric-updated")!;
+const creditFeedback = document.querySelector<HTMLElement>("#credit-feedback")!;
 const setupRow = document.querySelector<HTMLElement>("#setup-row")!;
 const setupMessage = document.querySelector<HTMLElement>("#setup-message")!;
 const installPlugin = document.querySelector<HTMLButtonElement>("#install-plugin")!;
 
 const hasTauriRuntime = "__TAURI_INTERNALS__" in window;
 const windowRef = hasTauriRuntime ? getCurrentWindow() : null;
-let latestSnapshot: Snapshot | null = null;
-let refreshInFlight = false;
+const CREDIT_VISIBLE_REFRESH_MS = 10_000;
+const CREDIT_BACKGROUND_REFRESH_MS = 120_000;
+const CREDIT_HOVER_STALE_MS = 5_000;
+const CREDIT_AFTER_COMPLETION_DELAY_MS = 2_500;
+let latestSnapshot: ActivityAndPluginSnapshot | null = null;
+let latestCredits: CreditSnapshot | null = null;
+let lastSuccessfulCredits: CreditSnapshot | null = null;
+let activityRefreshInFlight = false;
+let creditRefreshInFlight = false;
+let lastCreditRequestAt = 0;
+let completionCreditRefreshTimer: number | undefined;
 let installInProgress = false;
 let pluginFeedback: PluginStatus | null = null;
 let pluginFeedbackError: string | null = null;
@@ -160,7 +170,9 @@ function toTheme(value: string | undefined | null): Theme {
 
 function applyTheme(theme: Theme) {
   stage.dataset.theme = theme;
-  themeSelect.value = theme;
+  for (const option of themeOptions) {
+    option.setAttribute("aria-checked", String(option.dataset.themeValue === theme));
+  }
   localStorage.setItem("agent-buddy-theme", theme);
   setThemeImages(latestSnapshot?.activity.state ?? "unknown");
 }
@@ -282,16 +294,11 @@ function showPluginFeedback(status?: PluginStatus, error?: string) {
   }
 }
 
-function applySnapshot(snapshot: Snapshot) {
-  latestSnapshot = snapshot;
-  const meta = stateMeta(snapshot.activity.state);
-  stage.dataset.state = meta.className;
-  setThemeImages(snapshot.activity.state);
-  statusText.textContent = meta.label;
-  stateBadge.textContent = meta.icon;
-  metricState.textContent = meta.label;
+function applyCredits(snapshot: CreditSnapshot) {
+  latestCredits = snapshot;
+  if (snapshot.ok) lastSuccessfulCredits = snapshot;
 
-  const credits = snapshot.credits;
+  const credits = snapshot.ok ? snapshot : lastSuccessfulCredits ?? snapshot;
   creditLeft.textContent = fmtNumber(credits.left);
   metricLeft.textContent = fmtNumber(credits.left);
   metricTotal.textContent = fmtNumber(credits.total);
@@ -300,27 +307,74 @@ function applySnapshot(snapshot: Snapshot) {
   metricUpdated.textContent = fmtTime(credits.updatedAt);
   creditProgress.style.width = `${Math.max(0, Math.min(100, credits.percent ?? 0))}%`;
 
+  panel.dataset.creditStatus = snapshot.ok ? "ready" : "error";
+  creditFeedback.hidden = snapshot.ok;
+  creditFeedback.textContent = snapshot.ok
+    ? ""
+    : `${lastSuccessfulCredits ? "额度刷新失败，当前显示上次成功数据：" : "额度获取失败："}${snapshot.error || "未知错误"}`;
+}
+
+function scheduleCompletionCreditRefresh() {
+  window.clearTimeout(completionCreditRefreshTimer);
+  completionCreditRefreshTimer = window.setTimeout(() => {
+    void refreshCredits(0);
+  }, CREDIT_AFTER_COMPLETION_DELAY_MS);
+}
+
+function applySnapshot(snapshot: ActivityAndPluginSnapshot) {
+  const previousState = latestSnapshot?.activity.state;
+  latestSnapshot = snapshot;
+  const meta = stateMeta(snapshot.activity.state);
+  stage.dataset.state = meta.className;
+  setThemeImages(snapshot.activity.state);
+  statusText.textContent = meta.label;
+  stateBadge.textContent = meta.icon;
+  metricState.textContent = meta.label;
+
   const status = currentPluginStatus() ?? snapshot.plugin;
   if (pluginFeedbackError && Date.now() < pluginFeedbackUntil) {
     renderPluginError(pluginFeedbackError);
   } else {
     renderPluginStatus(status);
   }
+
+  if (snapshot.activity.state === "done" && previousState !== "done") {
+    scheduleCompletionCreditRefresh();
+  }
 }
 
-async function refreshSnapshot() {
+async function refreshActivitySnapshot() {
   if (!hasTauriRuntime) return;
-  if (refreshInFlight) return;
-  refreshInFlight = true;
+  if (activityRefreshInFlight) return;
+  activityRefreshInFlight = true;
   try {
-    const snapshot = await invoke<Snapshot>("workbuddy_snapshot");
+    const snapshot = await invoke<ActivityAndPluginSnapshot>("workbuddy_activity_snapshot");
     applySnapshot(snapshot);
   } catch (error) {
     console.error(error);
     stage.dataset.state = "failed";
     setThemeImages("failed");
   } finally {
-    refreshInFlight = false;
+    activityRefreshInFlight = false;
+  }
+}
+
+async function refreshCredits(minimumAgeMs: number) {
+  if (!hasTauriRuntime || creditRefreshInFlight) return;
+  if (Date.now() - lastCreditRequestAt < minimumAgeMs) return;
+
+  creditRefreshInFlight = true;
+  lastCreditRequestAt = Date.now();
+  try {
+    applyCredits(await invoke<CreditSnapshot>("workbuddy_credit_snapshot"));
+  } catch (error) {
+    applyCredits({
+      ok: false,
+      updatedAt: Math.floor(Date.now() / 1000),
+      error: errorText(error),
+    });
+  } finally {
+    creditRefreshInFlight = false;
   }
 }
 
@@ -332,12 +386,58 @@ function unionRect(rects: DOMRect[], padding: number, bodyRect: DOMRect) {
   return { x: left, y: top, w: right - left, h: bottom - top };
 }
 
+function closeThemeMenu() {
+  if (themeMenu.hidden) return;
+  themeMenu.hidden = true;
+  stage.classList.remove("theme-menu-open");
+  reportHitRegions();
+}
+
+function openThemeMenu(clientX: number, clientY: number) {
+  const stageRect = stage.getBoundingClientRect();
+  themeMenu.hidden = false;
+  stage.classList.add("theme-menu-open");
+
+  const menuRect = themeMenu.getBoundingClientRect();
+  const edge = 12;
+  const preferredLeft = clientX - stageRect.left + 12;
+  const preferredTop = clientY - stageRect.top + 12;
+  const left = Math.max(edge, Math.min(preferredLeft, stageRect.width - menuRect.width - edge));
+  const top = Math.max(edge, Math.min(preferredTop, stageRect.height - menuRect.height - edge));
+  themeMenu.style.left = `${left}px`;
+  themeMenu.style.top = `${top}px`;
+  reportHitRegions();
+}
+
+async function syncOverlayLayout() {
+  const fallbackHeight = window.screen.availHeight || window.innerHeight || 900;
+  let workAreaHeight = fallbackHeight;
+
+  if (hasTauriRuntime) {
+    const monitor = await currentMonitor();
+    if (monitor) workAreaHeight = monitor.workArea.size.toLogical(monitor.scaleFactor).height;
+  }
+
+  const layoutScale = Math.max(0.72, Math.min(1, workAreaHeight / 900));
+  const stageWidth = Math.round(400 * layoutScale);
+  const stageHeight = Math.round(440 * layoutScale);
+  const layoutKey = `${stageWidth}:${stageHeight}`;
+
+  if (stage.dataset.layoutKey === layoutKey) return;
+  stage.dataset.layoutKey = layoutKey;
+  stage.style.setProperty("--layout-scale", String(layoutScale));
+
+  if (windowRef) await windowRef.setSize(new LogicalSize(stageWidth, stageHeight));
+  reportHitRegions();
+}
+
 function reportHitRegions() {
   if (!hasTauriRuntime) return;
   const bodyRect = document.body.getBoundingClientRect();
-  const petElements = toTheme(stage.dataset.theme) === "workbuddy"
-    ? [petCard, stateBadge, stand, themePicker]
-    : [petCard, themePicker];
+  const petElements: HTMLElement[] = toTheme(stage.dataset.theme) === "workbuddy"
+    ? [petCard, stateBadge, stand]
+    : [petCard];
+  if (!themeMenu.hidden) petElements.push(themeMenu);
   const pet = unionRect(
     petElements.map((element) => element.getBoundingClientRect()),
     8,
@@ -358,7 +458,14 @@ function reportHitRegions() {
 
 petCard.addEventListener("mousedown", async (event) => {
   if (event.button !== 0 || !windowRef) return;
+  closeThemeMenu();
   await windowRef.startDragging();
+});
+
+petCard.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  openThemeMenu(event.clientX, event.clientY);
 });
 
 installPlugin.addEventListener("click", async () => {
@@ -381,32 +488,57 @@ installPlugin.addEventListener("click", async () => {
   }
 });
 
-themeSelect.addEventListener("change", () => {
-  applyTheme(toTheme(themeSelect.value));
-  reportHitRegions();
+for (const option of themeOptions) {
+  option.addEventListener("click", () => {
+    applyTheme(toTheme(option.dataset.themeValue));
+    closeThemeMenu();
+  });
+}
+
+document.addEventListener("pointerdown", (event) => {
+  if (themeMenu.hidden || themeMenu.contains(event.target as Node)) return;
+  closeThemeMenu();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeThemeMenu();
 });
 
 window.addEventListener("resize", reportHitRegions);
+stage.addEventListener("pointerenter", () => {
+  void refreshCredits(CREDIT_HOVER_STALE_MS);
+});
 
 if (hasTauriRuntime) {
   void listen<PluginInstallFeedback>("workbuddy-plugin-status", ({ payload }) => {
     installInProgress = false;
     showPluginFeedback(payload.status, payload.error);
   });
+  void windowRef?.onScaleChanged(() => void syncOverlayLayout());
+  void windowRef?.onMoved(() => void syncOverlayLayout());
 }
 
-setInterval(refreshSnapshot, 800);
+setInterval(refreshActivitySnapshot, 800);
+setInterval(() => {
+  void refreshCredits(
+    stage.matches(":hover") ? CREDIT_VISIBLE_REFRESH_MS : CREDIT_BACKGROUND_REFRESH_MS,
+  );
+}, CREDIT_VISIBLE_REFRESH_MS);
 setInterval(reportHitRegions, 120);
 
 applyTheme(toTheme(localStorage.getItem("agent-buddy-theme")));
-void refreshSnapshot();
-reportHitRegions();
+void refreshActivitySnapshot();
+void refreshCredits(CREDIT_BACKGROUND_REFRESH_MS);
+void syncOverlayLayout();
 
-document.addEventListener("contextmenu", (event) => event.preventDefault());
+document.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+  if (!themeMenu.contains(event.target as Node)) closeThemeMenu();
+});
 
 // Keep a tiny debug breadcrumb in devtools without exposing tokens or paths.
 Object.defineProperty(window, "agentBuddySnapshot", {
   get() {
-    return latestSnapshot;
+    return latestSnapshot ? { ...latestSnapshot, credits: latestCredits } : null;
   },
 });

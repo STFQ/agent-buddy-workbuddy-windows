@@ -12,17 +12,18 @@ const PLUGIN_ID: &str = "workbuddy-buddy@workbuddy-buddy";
 const PLUGIN_VERSION: &str = "0.1.1";
 const DOWNLOAD_URL: &str = "https://www.workbuddy.cn/";
 
-const PLUGIN_JSON: &str = include_str!("../resources/workbuddy-plugin/.codebuddy-plugin/plugin.json");
+const PLUGIN_JSON: &str =
+    include_str!("../resources/workbuddy-plugin/.codebuddy-plugin/plugin.json");
 const HOOKS_JSON: &str = include_str!("../resources/workbuddy-plugin/hooks.json");
 const STATUS_HOOK: &str = include_str!("../resources/workbuddy-plugin/scripts/status-hook.mjs");
 const STATUS_HOOK_CMD: &str = include_str!("../resources/workbuddy-plugin/scripts/status-hook.cmd");
-const STATUS_RUNTIME: &str = include_str!("../resources/workbuddy-plugin/scripts/status-runtime.mjs");
+const STATUS_RUNTIME: &str =
+    include_str!("../resources/workbuddy-plugin/scripts/status-runtime.mjs");
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Snapshot {
+pub struct ActivityAndPluginSnapshot {
     activity: ActivitySnapshot,
-    credits: CreditSnapshot,
     plugin: PluginStatus,
 }
 
@@ -91,12 +92,16 @@ impl PluginStatus {
 }
 
 #[tauri::command]
-pub fn workbuddy_snapshot() -> Snapshot {
-    Snapshot {
+pub fn workbuddy_activity_snapshot() -> Result<ActivityAndPluginSnapshot, String> {
+    Ok(ActivityAndPluginSnapshot {
         activity: activity_snapshot(),
-        credits: credit_snapshot(),
         plugin: plugin_status(false),
-    }
+    })
+}
+
+#[tauri::command]
+pub fn workbuddy_credit_snapshot() -> Result<CreditSnapshot, String> {
+    Ok(credit_snapshot())
 }
 
 #[tauri::command]
@@ -113,7 +118,9 @@ pub(crate) fn install_workbuddy_status_plugin_blocking() -> Result<PluginStatus,
     enable_plugin_in_settings(&home)?;
     let status = plugin_status(true);
     if !status.is_ready() {
-        return Err("WorkBuddy 插件管理器没有完成实时状态插件的注册，请重启 WorkBuddy 后重试。".to_owned());
+        return Err(
+            "WorkBuddy 插件管理器没有完成实时状态插件的注册，请重启 WorkBuddy 后重试。".to_owned(),
+        );
     }
     Ok(status)
 }
@@ -200,7 +207,9 @@ fn latest_spool_event() -> Option<SpoolEvent> {
     let home = dirs::home_dir()?;
     let candidates = [
         home.join(".workbuddy-buddy").join("events.spool"),
-        home.join(".agent-buddy").join("workbuddy").join("events.spool"),
+        home.join(".agent-buddy")
+            .join("workbuddy")
+            .join("events.spool"),
     ];
     candidates
         .iter()
@@ -237,8 +246,13 @@ fn credit_snapshot() -> CreditSnapshot {
 
 fn fetch_credits() -> Result<CreditSnapshot, String> {
     let session = read_auth_session()?;
-    let endpoint = resolve_endpoint(&session).unwrap_or_else(|| "https://copilot.tencent.com".to_owned());
-    if session.enterprise_id.as_deref().is_some_and(|value| !value.trim().is_empty()) {
+    let endpoint =
+        resolve_endpoint(&session).unwrap_or_else(|| "https://copilot.tencent.com".to_owned());
+    if session
+        .enterprise_id
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty())
+    {
         fetch_enterprise_credits(&endpoint, &session)
     } else {
         fetch_personal_credits(&endpoint, &session)
@@ -253,8 +267,18 @@ fn fetch_personal_credits(endpoint: &str, session: &AuthSession) -> Result<Credi
         "Status": [0, 3],
         "OnlyValidPeriod": true
     });
-    let value = post_json(endpoint, "/v2/billing/meter/get-user-resource", session, body, true)?;
-    if value.get("code").and_then(Value::as_i64).is_some_and(|code| code != 0) {
+    let value = post_json(
+        endpoint,
+        "/v2/billing/meter/get-user-resource",
+        session,
+        body,
+        true,
+    )?;
+    if value
+        .get("code")
+        .and_then(Value::as_i64)
+        .is_some_and(|code| code != 0)
+    {
         return Err("WorkBuddy 计费接口返回失败。".to_owned());
     }
     let accounts = value
@@ -277,7 +301,11 @@ fn fetch_personal_credits(endpoint: &str, session: &AuthSession) -> Result<Credi
         left += number_field(account, "CycleCapacityRemainPrecise").unwrap_or(0.0);
     }
     let used = (total - left).max(0.0);
-    let percent = if total > 0.0 { Some(left / total * 100.0) } else { None };
+    let percent = if total > 0.0 {
+        Some(left / total * 100.0)
+    } else {
+        None
+    };
 
     Ok(CreditSnapshot {
         ok: true,
@@ -292,7 +320,10 @@ fn fetch_personal_credits(endpoint: &str, session: &AuthSession) -> Result<Credi
     })
 }
 
-fn fetch_enterprise_credits(endpoint: &str, session: &AuthSession) -> Result<CreditSnapshot, String> {
+fn fetch_enterprise_credits(
+    endpoint: &str,
+    session: &AuthSession,
+) -> Result<CreditSnapshot, String> {
     let value = post_json(
         endpoint,
         "/v2/billing/meter/get-enterprise-user-usage",
@@ -300,7 +331,11 @@ fn fetch_enterprise_credits(endpoint: &str, session: &AuthSession) -> Result<Cre
         json!({}),
         false,
     )?;
-    if value.get("code").and_then(Value::as_i64).is_some_and(|code| code != 0) {
+    if value
+        .get("code")
+        .and_then(Value::as_i64)
+        .is_some_and(|code| code != 0)
+    {
         return Err("WorkBuddy 企业计费接口返回失败。".to_owned());
     }
     let usage = value
@@ -310,7 +345,11 @@ fn fetch_enterprise_credits(endpoint: &str, session: &AuthSession) -> Result<Cre
     let limit = number_value(usage.get("limitNum")).unwrap_or(0.0);
     let used = number_value(usage.get("credit")).unwrap_or(0.0);
     let left = (limit - used).max(0.0);
-    let percent = if limit > 0.0 { Some(left / limit * 100.0) } else { None };
+    let percent = if limit > 0.0 {
+        Some(left / limit * 100.0)
+    } else {
+        None
+    };
 
     Ok(CreditSnapshot {
         ok: true,
@@ -325,7 +364,13 @@ fn fetch_enterprise_credits(endpoint: &str, session: &AuthSession) -> Result<Cre
     })
 }
 
-fn post_json(endpoint: &str, path: &str, session: &AuthSession, body: Value, zh: bool) -> Result<Value, String> {
+fn post_json(
+    endpoint: &str,
+    path: &str,
+    session: &AuthSession,
+    body: Value,
+    zh: bool,
+) -> Result<Value, String> {
     let url = format!("{}{}", endpoint.trim_end_matches('/'), path);
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(10))
@@ -341,7 +386,11 @@ fn post_json(endpoint: &str, path: &str, session: &AuthSession, body: Value, zh:
     if zh {
         request = request.header("Accept-Language", "zh");
     }
-    if let Some(domain) = session.domain.as_deref().filter(|value| !value.trim().is_empty()) {
+    if let Some(domain) = session
+        .domain
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
         request = request.header("X-Domain", domain);
     }
     if let Some(enterprise_id) = session
@@ -369,8 +418,10 @@ fn read_auth_session() -> Result<AuthSession, String> {
         .into_iter()
         .find(|path| path.is_file())
         .ok_or_else(|| "未找到 WorkBuddy 登录态，请先登录 WorkBuddy。".to_owned())?;
-    let value: Value = serde_json::from_slice(&fs::read(path).map_err(|_| "无法读取 WorkBuddy 登录态。".to_owned())?)
-        .map_err(|_| "WorkBuddy 登录态不是有效 JSON。".to_owned())?;
+    let value: Value = serde_json::from_slice(
+        &fs::read(path).map_err(|_| "无法读取 WorkBuddy 登录态。".to_owned())?,
+    )
+    .map_err(|_| "WorkBuddy 登录态不是有效 JSON。".to_owned())?;
     let access_token = value
         .pointer("/auth/accessToken")
         .and_then(Value::as_str)
@@ -386,32 +437,68 @@ fn read_auth_session() -> Result<AuthSession, String> {
     Ok(AuthSession {
         access_token,
         uid,
-        domain: value.pointer("/auth/domain").and_then(Value::as_str).map(ToOwned::to_owned),
+        domain: value
+            .pointer("/auth/domain")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned),
         enterprise_id: value
             .pointer("/account/enterpriseId")
             .and_then(Value::as_str)
             .map(ToOwned::to_owned),
-        account_type: value.pointer("/account/type").and_then(Value::as_str).map(ToOwned::to_owned),
+        account_type: value
+            .pointer("/account/type")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned),
     })
 }
 
 fn auth_candidates() -> Vec<PathBuf> {
     let mut paths = Vec::new();
     if let Some(data) = dirs::data_dir() {
-        paths.push(data.join("CodeBuddyExtension").join("Data").join("Public").join("auth").join("workbuddy-desktop.info"));
+        paths.push(
+            data.join("CodeBuddyExtension")
+                .join("Data")
+                .join("Public")
+                .join("auth")
+                .join("workbuddy-desktop.info"),
+        );
     }
     if let Some(data) = dirs::data_local_dir() {
-        paths.push(data.join("CodeBuddyExtension").join("Data").join("Public").join("auth").join("workbuddy-desktop.info"));
+        paths.push(
+            data.join("CodeBuddyExtension")
+                .join("Data")
+                .join("Public")
+                .join("auth")
+                .join("workbuddy-desktop.info"),
+        );
     }
     if let Some(home) = dirs::home_dir() {
-        paths.push(home.join("AppData").join("Roaming").join("CodeBuddyExtension").join("Data").join("Public").join("auth").join("workbuddy-desktop.info"));
-        paths.push(home.join("AppData").join("Local").join("CodeBuddyExtension").join("Data").join("Public").join("auth").join("workbuddy-desktop.info"));
+        paths.push(
+            home.join("AppData")
+                .join("Roaming")
+                .join("CodeBuddyExtension")
+                .join("Data")
+                .join("Public")
+                .join("auth")
+                .join("workbuddy-desktop.info"),
+        );
+        paths.push(
+            home.join("AppData")
+                .join("Local")
+                .join("CodeBuddyExtension")
+                .join("Data")
+                .join("Public")
+                .join("auth")
+                .join("workbuddy-desktop.info"),
+        );
     }
     dedupe(paths)
 }
 
 fn resolve_endpoint(session: &AuthSession) -> Option<String> {
-    let product_dir = product_dirs().into_iter().find(|dir| dir.join("product.json").is_file())?;
+    let product_dir = product_dirs()
+        .into_iter()
+        .find(|dir| dir.join("product.json").is_file())?;
     let base = read_json_file(&product_dir.join("product.json"))?;
     let env_file = environment_product_file(session.domain.as_deref(), &base);
     let env_product = env_file.and_then(|name| read_json_file(&product_dir.join(name)));
@@ -422,22 +509,157 @@ fn resolve_endpoint(session: &AuthSession) -> Option<String> {
 }
 
 fn product_dirs() -> Vec<PathBuf> {
-    let mut paths = Vec::new();
+    let mut install_roots = Vec::new();
+    install_roots.extend(running_workbuddy_install_roots());
+    install_roots.extend(registered_install_roots());
     if let Some(data) = dirs::data_local_dir() {
-        paths.push(data.join("Programs").join("WorkBuddy").join("resources").join("app.asar.unpacked").join("cli"));
-        paths.push(data.join("WorkBuddy").join("resources").join("app.asar.unpacked").join("cli"));
+        install_roots.push(data.join("Programs").join("WorkBuddy"));
+        install_roots.push(data.join("WorkBuddy"));
+        install_roots.extend(child_directories(&data.join("Programs")));
+        install_roots.extend(child_directories(&data));
     }
     if let Some(home) = dirs::home_dir() {
-        paths.push(home.join("AppData").join("Local").join("Programs").join("WorkBuddy").join("resources").join("app.asar.unpacked").join("cli"));
-        paths.push(home.join("AppData").join("Local").join("WorkBuddy").join("resources").join("app.asar.unpacked").join("cli"));
+        let local = home.join("AppData").join("Local");
+        install_roots.push(local.join("Programs").join("WorkBuddy"));
+        install_roots.push(local.join("WorkBuddy"));
+    }
+    if let Some(data) = dirs::data_dir() {
+        install_roots.push(data.join("Programs").join("WorkBuddy"));
+        install_roots.push(data.join("WorkBuddy"));
+        install_roots.extend(child_directories(&data.join("Programs")));
     }
     if let Ok(program_files) = std::env::var("ProgramFiles") {
-        paths.push(PathBuf::from(program_files).join("WorkBuddy").join("resources").join("app.asar.unpacked").join("cli"));
+        let root = PathBuf::from(program_files);
+        install_roots.push(root.join("WorkBuddy"));
+        install_roots.extend(child_directories(&root));
     }
     if let Ok(program_files_x86) = std::env::var("ProgramFiles(x86)") {
-        paths.push(PathBuf::from(program_files_x86).join("WorkBuddy").join("resources").join("app.asar.unpacked").join("cli"));
+        let root = PathBuf::from(program_files_x86);
+        install_roots.push(root.join("WorkBuddy"));
+        install_roots.extend(child_directories(&root));
     }
-    dedupe(paths)
+    if let Ok(program_files_64) = std::env::var("ProgramW6432") {
+        let root = PathBuf::from(program_files_64);
+        install_roots.push(root.join("WorkBuddy"));
+        install_roots.extend(child_directories(&root));
+    }
+
+    dedupe(
+        install_roots
+            .iter()
+            .flat_map(|root| cli_dirs_for_install(root))
+            .collect(),
+    )
+}
+
+fn cli_dirs_for_install(install_root: &Path) -> Vec<PathBuf> {
+    vec![
+        install_root
+            .join("resources")
+            .join("app.asar.unpacked")
+            .join("cli"),
+        install_root.join("resources").join("app").join("cli"),
+        install_root.join("cli"),
+    ]
+}
+
+fn child_directories(root: &Path) -> Vec<PathBuf> {
+    fs::read_dir(root)
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .collect()
+}
+
+#[cfg(windows)]
+fn running_workbuddy_install_roots() -> Vec<PathBuf> {
+    let mut command = Command::new("powershell.exe");
+    command.args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Get-Process -Name WorkBuddy -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Path",
+    ]);
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+    let Ok(output) = command.output() else {
+        return Vec::new();
+    };
+    process_install_roots_from_output(&String::from_utf8_lossy(&output.stdout))
+}
+
+#[cfg(not(windows))]
+fn running_workbuddy_install_roots() -> Vec<PathBuf> {
+    Vec::new()
+}
+
+fn process_install_roots_from_output(output: &str) -> Vec<PathBuf> {
+    dedupe(
+        output
+            .lines()
+            .map(str::trim)
+            .filter(|path| !path.is_empty())
+            .map(PathBuf::from)
+            .filter(|path| {
+                path.file_name()
+                    .is_some_and(|name| name.eq_ignore_ascii_case("WorkBuddy.exe"))
+            })
+            .filter_map(|path| path.parent().map(Path::to_path_buf))
+            .collect(),
+    )
+}
+
+#[cfg(windows)]
+fn registered_install_roots() -> Vec<PathBuf> {
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ};
+    use winreg::RegKey;
+
+    const UNINSTALL_KEY: &str = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
+    let mut roots = Vec::new();
+    for hive in [
+        RegKey::predef(HKEY_CURRENT_USER),
+        RegKey::predef(HKEY_LOCAL_MACHINE),
+    ] {
+        let Ok(uninstall) = hive.open_subkey_with_flags(UNINSTALL_KEY, KEY_READ) else {
+            continue;
+        };
+        for name in uninstall.enum_keys().filter_map(Result::ok) {
+            let Ok(entry) = uninstall.open_subkey_with_flags(&name, KEY_READ) else {
+                continue;
+            };
+            if let Ok(location) = entry.get_value::<String, _>("InstallLocation") {
+                let path = PathBuf::from(location.trim());
+                if path.is_dir() {
+                    roots.push(path);
+                }
+            }
+            if let Ok(icon) = entry.get_value::<String, _>("DisplayIcon") {
+                if let Some(path) = install_root_from_display_icon(&icon) {
+                    roots.push(path);
+                }
+            }
+        }
+    }
+    dedupe(roots)
+}
+
+#[cfg(not(windows))]
+fn registered_install_roots() -> Vec<PathBuf> {
+    Vec::new()
+}
+
+fn install_root_from_display_icon(value: &str) -> Option<PathBuf> {
+    let value = value.trim();
+    let executable = if let Some(quoted) = value.strip_prefix('"') {
+        quoted.split('"').next()?
+    } else {
+        value.split(',').next()?.trim()
+    };
+    Path::new(executable).parent().map(Path::to_path_buf)
 }
 
 fn environment_product_file(domain: Option<&str>, base: &Value) -> Option<&'static str> {
@@ -459,35 +681,29 @@ fn environment_product_file(domain: Option<&str>, base: &Value) -> Option<&'stat
 }
 
 fn matches_domain(domain: &str, patterns: Option<&Value>) -> bool {
-    patterns
-        .and_then(Value::as_array)
-        .is_some_and(|items| {
-            items.iter().filter_map(Value::as_str).any(|pattern| {
-                let pattern = pattern.to_lowercase();
-                if let Some(suffix) = pattern.strip_prefix("*.") {
-                    domain.ends_with(suffix)
-                } else {
-                    domain == pattern
-                }
-            })
+    patterns.and_then(Value::as_array).is_some_and(|items| {
+        items.iter().filter_map(Value::as_str).any(|pattern| {
+            let pattern = pattern.to_lowercase();
+            if let Some(suffix) = pattern.strip_prefix("*.") {
+                domain.ends_with(suffix)
+            } else {
+                domain == pattern
+            }
         })
+    })
 }
 
 fn plugin_status(restart_required: bool) -> PluginStatus {
     let home = dirs::home_dir();
     let host_installed = home.as_deref().is_some_and(host_is_installed);
-    let settings_enabled = home
-        .as_deref()
-        .is_some_and(|home| {
-            read_json_file(&settings_path(home))
-                .is_some_and(|settings| plugin_is_enabled(&settings, home))
-        });
-    let marketplace_available = home
-        .as_deref()
-        .is_some_and(|home| marketplace_is_registered(home) && marketplace_manifest_path(home).is_file());
-    let plugin_installed = home
-        .as_deref()
-        .is_some_and(plugin_is_currently_installed);
+    let settings_enabled = home.as_deref().is_some_and(|home| {
+        read_json_file(&settings_path(home))
+            .is_some_and(|settings| plugin_is_enabled(&settings, home))
+    });
+    let marketplace_available = home.as_deref().is_some_and(|home| {
+        marketplace_is_registered(home) && marketplace_manifest_path(home).is_file()
+    });
+    let plugin_installed = home.as_deref().is_some_and(plugin_is_currently_installed);
     let plugin_configured = settings_enabled && marketplace_available && plugin_installed;
     let has_any_event = home
         .as_ref()
@@ -501,7 +717,10 @@ fn plugin_status(restart_required: bool) -> PluginStatus {
         } else {
             "实时状态已启用；重启 WorkBuddy 后新开任务即可同步。"
         }
-    } else if settings_enabled || marketplace_available || installed_plugin_version(home.as_deref()).is_some() {
+    } else if settings_enabled
+        || marketplace_available
+        || installed_plugin_version(home.as_deref()).is_some()
+    {
         "检测到未完成或过期的状态插件，点击可自动修复。"
     } else if !host_installed {
         "未检测到 WorkBuddy，请先安装并登录。"
@@ -530,12 +749,24 @@ fn host_is_installed(home: &Path) -> bool {
 fn install_plugin_files(home: &Path) -> Result<(), String> {
     let root = marketplace_root(home);
     let plugin = root.join("plugins").join(MARKETPLACE_ID);
-    write_text(&root.join(".codebuddy-plugin").join("marketplace.json"), &marketplace_json(&plugin))?;
-    write_text(&plugin.join(".codebuddy-plugin").join("plugin.json"), PLUGIN_JSON)?;
+    write_text(
+        &root.join(".codebuddy-plugin").join("marketplace.json"),
+        &marketplace_json(&plugin),
+    )?;
+    write_text(
+        &plugin.join(".codebuddy-plugin").join("plugin.json"),
+        PLUGIN_JSON,
+    )?;
     write_text(&plugin.join("hooks").join("hooks.json"), HOOKS_JSON)?;
-    write_text(&plugin.join("scripts").join("status-hook.cmd"), STATUS_HOOK_CMD)?;
+    write_text(
+        &plugin.join("scripts").join("status-hook.cmd"),
+        STATUS_HOOK_CMD,
+    )?;
     write_text(&plugin.join("scripts").join("status-hook.mjs"), STATUS_HOOK)?;
-    write_text(&plugin.join("scripts").join("status-runtime.mjs"), STATUS_RUNTIME)?;
+    write_text(
+        &plugin.join("scripts").join("status-runtime.mjs"),
+        STATUS_RUNTIME,
+    )?;
     Ok(())
 }
 
@@ -546,7 +777,14 @@ fn install_plugin_with_workbuddy(home: &Path) -> Result<(), String> {
         run_workbuddy_cli(
             &cli,
             home,
-            &["plugin", "marketplace", "add", &marketplace, "--name", MARKETPLACE_ID],
+            &[
+                "plugin",
+                "marketplace",
+                "add",
+                &marketplace,
+                "--name",
+                MARKETPLACE_ID,
+            ],
             "注册本地插件源",
         )?;
     }
@@ -605,11 +843,21 @@ fn find_workbuddy_cli(home: &Path) -> Result<WorkBuddyCli, String> {
 }
 
 fn workbuddy_node(home: &Path) -> Option<PathBuf> {
-    let versions = home.join(".workbuddy").join("binaries").join("node").join("versions");
+    let versions = home
+        .join(".workbuddy")
+        .join("binaries")
+        .join("node")
+        .join("versions");
     let mut candidates = fs::read_dir(versions)
         .ok()?
         .filter_map(Result::ok)
-        .map(|entry| entry.path().join(if cfg!(windows) { "node.exe" } else { "bin/node" }))
+        .map(|entry| {
+            entry.path().join(if cfg!(windows) {
+                "node.exe"
+            } else {
+                "bin/node"
+            })
+        })
         .filter(|path| path.is_file())
         .collect::<Vec<_>>();
     candidates.sort_by(|left, right| right.cmp(left));
@@ -827,7 +1075,9 @@ fn write_text(path: &Path, content: &str) -> Result<(), String> {
 }
 
 fn write_settings_atomically(path: &Path, settings: &Value) -> Result<(), String> {
-    let parent = path.parent().ok_or_else(|| "WorkBuddy 设置路径无效。".to_owned())?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| "WorkBuddy 设置路径无效。".to_owned())?;
     fs::create_dir_all(parent).map_err(|_| "无法创建 WorkBuddy 设置目录。".to_owned())?;
     if path.is_file() {
         let backup = parent.join("settings.json.agent-buddy.bak");
@@ -857,7 +1107,10 @@ fn write_settings_atomically(path: &Path, settings: &Value) -> Result<(), String
     fs::rename(&tmp, path).map_err(|_| "无法替换 WorkBuddy settings.json。".to_owned())
 }
 
-fn ensure_object<'a>(root: &'a mut Map<String, Value>, key: &str) -> Result<&'a mut Map<String, Value>, String> {
+fn ensure_object<'a>(
+    root: &'a mut Map<String, Value>,
+    key: &str,
+) -> Result<&'a mut Map<String, Value>, String> {
     if !root.contains_key(key) {
         root.insert(key.to_owned(), Value::Object(Map::new()));
     }
@@ -925,9 +1178,18 @@ mod tests {
 
     #[test]
     fn marketplace_uses_workbuddy_plugin_name() {
-        let manifest: Value = serde_json::from_str(&marketplace_json(Path::new("workbuddy-buddy"))).unwrap();
-        assert_eq!(manifest.pointer("/plugins/0/name").and_then(Value::as_str), Some(MARKETPLACE_ID));
-        assert_eq!(manifest.pointer("/plugins/0/version").and_then(Value::as_str), Some(PLUGIN_VERSION));
+        let manifest: Value =
+            serde_json::from_str(&marketplace_json(Path::new("workbuddy-buddy"))).unwrap();
+        assert_eq!(
+            manifest.pointer("/plugins/0/name").and_then(Value::as_str),
+            Some(MARKETPLACE_ID)
+        );
+        assert_eq!(
+            manifest
+                .pointer("/plugins/0/version")
+                .and_then(Value::as_str),
+            Some(PLUGIN_VERSION)
+        );
     }
 
     #[test]
@@ -943,9 +1205,21 @@ mod tests {
 
     #[test]
     fn accepts_cached_and_registered_directory_plugin_installations() {
-        assert!(plugin_installation_is_current(Some(PLUGIN_VERSION), None, false));
-        assert!(plugin_installation_is_current(None, Some(PLUGIN_VERSION), true));
-        assert!(!plugin_installation_is_current(None, Some(PLUGIN_VERSION), false));
+        assert!(plugin_installation_is_current(
+            Some(PLUGIN_VERSION),
+            None,
+            false
+        ));
+        assert!(plugin_installation_is_current(
+            None,
+            Some(PLUGIN_VERSION),
+            true
+        ));
+        assert!(!plugin_installation_is_current(
+            None,
+            Some(PLUGIN_VERSION),
+            false
+        ));
         assert!(!plugin_installation_is_current(None, Some("0.1.0"), true));
     }
 
@@ -987,5 +1261,35 @@ mod tests {
             }
         });
         assert!(plugin_is_enabled(&current, home));
+    }
+
+    #[test]
+    fn discovers_cli_layouts_without_relying_on_the_install_folder_name() {
+        let install = Path::new(r"C:\\Apps\\A-custom-WorkBuddy-name");
+        let paths = cli_dirs_for_install(install);
+        assert!(paths.contains(
+            &install
+                .join("resources")
+                .join("app.asar.unpacked")
+                .join("cli")
+        ));
+        assert!(paths.contains(&install.join("resources").join("app").join("cli")));
+        assert!(paths.contains(&install.join("cli")));
+    }
+
+    #[test]
+    fn reads_an_install_root_from_a_windows_display_icon() {
+        assert_eq!(
+            install_root_from_display_icon(r#""D:\\Tools\\WorkBuddy\\WorkBuddy.exe",0"#),
+            Some(PathBuf::from(r"D:\\Tools\\WorkBuddy"))
+        );
+    }
+
+    #[test]
+    fn discovers_a_custom_drive_install_from_the_running_process_path() {
+        let roots = process_install_roots_from_output(
+            "D:\\app\\WorkBuddy\\WorkBuddy.exe\r\nD:\\app\\WorkBuddy\\WorkBuddy.exe\r\n",
+        );
+        assert_eq!(roots, vec![PathBuf::from(r"D:\\app\\WorkBuddy")]);
     }
 }
